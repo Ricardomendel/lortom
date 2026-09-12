@@ -31,13 +31,23 @@ files = {} #Dictionary to store the list of files
 def safe_translate(text, dest):
     """Translate text, falling back to the original on failure instead of
     crashing the whole broadcast loop (one bad translation shouldn't stop
-    every other room member from getting the message). Logs the real error
-    so it's visible in the server logs (e.g. Render's Logs tab) instead of
-    silently showing up as "translation didn't happen"."""
+    every other room member from getting the message).
+
+    Logs every call at WARNING level (not just failures) with the input and
+    output side by side, so a production issue shows up as one of exactly
+    three cases in the logs: an exception (network/library problem), output
+    identical to input (Google's endpoint accepted the request but silently
+    declined to translate it -- a known behavior when it treats the request
+    as automated traffic), or output that differs (translation is working
+    and the bug is elsewhere, e.g. the wrong language being requested).
+    WARNING is used deliberately: Python's root logger defaults to WARNING,
+    so this stays visible even if INFO-level logs are being swallowed."""
     try:
-        return translator.translate(text, src='auto', dest=dest).text
+        result = translator.translate(text, src='auto', dest=dest).text
+        app.logger.warning(f"[translate] dest={dest!r} in={text[:60]!r} out={result[:60]!r}")
+        return result
     except Exception as e:
-        app.logger.error(f"Translation to '{dest}' failed: {e}")
+        app.logger.warning(f"[translate] dest={dest!r} in={text[:60]!r} FAILED: {e}")
         return text
 
 def generate_unique_code(length):
