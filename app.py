@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, session, redirect, url_for, send_file
-from flask_socketio import join_room, leave_room, send, SocketIO, emit
+from flask_socketio import join_room, leave_room, send, SocketIO, emit, disconnect
 from dotenv import load_dotenv
 import os
 import random
@@ -156,8 +156,8 @@ def generate_unique_code(length):
 def generate_unique_id(length=8):
     return ''.join(random.choice(ascii_uppercase + digits) for _ in range(length))
 
-def new_room():
-    return {"members": [], "messages": [], "call_participants": set()}
+def new_room(owner_id=None):
+    return {"members": [], "messages": [], "call_participants": set(), "owner_id": owner_id}
 
 @app.route("/", methods=["POST", "GET"])
 def main():
@@ -180,17 +180,19 @@ def home():
         if join != False and not code:
             return render_template("home.html", error="Please enter a room code!", code=code, name=name)
 
+        user_id = generate_unique_id()
+
         room = code
         if create != False:
             room = generate_unique_code(4)
-            rooms[room] = new_room()
+            rooms[room] = new_room(owner_id=user_id)
         elif code not in rooms:
             return render_template("home.html", error="Room does not exist.", code=code, name=name)
 
         session["room"] = room
         session["name"] = name
         session["language"] = language
-        session["user_id"] = generate_unique_id()
+        session["user_id"] = user_id
         return redirect(url_for("room"))
 
     return render_template("home.html")
@@ -201,11 +203,30 @@ def room():
     if room is None or session.get("name") is None or room not in rooms:
         return redirect(url_for("home"))
 
-    return render_template("room.html", code=room)
+    is_owner = session.get("user_id") == rooms[room].get("owner_id")
+    return render_template("room.html", code=room, is_owner=is_owner)
 
 @app.route('/help')
 def help_page():
     return render_template('help.html')
+
+def find_message_by_id(room, message_id):
+    if not message_id or room not in rooms:
+        return None
+    return next((m for m in rooms[room]["messages"] if m.get("id") == message_id), None)
+
+def build_reply_preview(room, reply_to_id, dest_language):
+    """Looks up the original message being replied to and translates just its
+    preview into the recipient's language -- always from the true original text,
+    never from an already-translated copy, so quoted replies don't degrade
+    through a second round of translation."""
+    original = find_message_by_id(room, reply_to_id)
+    if not original:
+        return None
+    return {
+        "name": original["name"],
+        "message": safe_translate(original["message"], dest_language),
+    }
 
 @socketio.on("message")
 def handle_message(data):
@@ -216,10 +237,14 @@ def handle_message(data):
     sender_name = session.get("name")
     original_message = data["data"]
     is_voice = bool(data.get("is_voice"))
+    reply_to_id = data.get("reply_to_id")
 
+    message_id = generate_unique_id()
     content = {
+        "id": message_id,
         "name": sender_name,
-        "message": original_message
+        "message": original_message,
+        "reply_to_id": reply_to_id,
     }
     rooms[room]["messages"].append(content)
 
@@ -228,9 +253,11 @@ def handle_message(data):
         translated_message = safe_translate(original_message, user_language)
 
         translated_content = {
+            "id": message_id,
             "name": sender_name,
             "message": translated_message,
-            "is_voice": is_voice
+            "is_voice": is_voice,
+            "reply_to": build_reply_preview(room, reply_to_id, user_language),
         }
 
         emit("message", translated_content, room=member["sid"])
@@ -293,7 +320,12 @@ def connect(auth):
     # Send existing messages to the newly connected user
     for message in rooms[room]["messages"]:
         translated_message = safe_translate(message["message"], language)
-        emit("message", {"name": message["name"], "message": translated_message}, room=sid)
+        emit("message", {
+            "id": message.get("id"),
+            "name": message["name"],
+            "message": translated_message,
+            "reply_to": build_reply_preview(room, message.get("reply_to_id"), language),
+        }, room=sid)
 
     # Broadcast a message that the user has joined the room
     for member in rooms[room]["members"]:
@@ -303,7 +335,7 @@ def connect(auth):
 
 
 @socketio.on("disconnect")
-def disconnect():
+def handle_disconnect():
     room = session.get("room")
     name = session.get("name")
     sid = request.sid
@@ -336,6 +368,24 @@ def disconnect():
             if room in rooms and sid in rooms[room]["call_participants"]:
                 rooms[room]["call_participants"].discard(sid)
                 emit("call_left", {"name": name}, room=room)
+
+@socketio.on("kick_user")
+def handle_kick_user(data):
+    """Lets the room's creator remove another member. Forcing their socket to
+    disconnect reuses all the normal disconnect cleanup (member list, call
+    state, "has left" message) -- kicking isn't a separate code path."""
+    room = session.get("room")
+    user_id = session.get("user_id")
+    if room not in rooms or rooms[room].get("owner_id") != user_id:
+        return
+
+    target_user_id = data.get("target_user_id")
+    target_member = next((m for m in rooms[room]["members"] if m["user_id"] == target_user_id), None)
+    if not target_member or target_member["user_id"] == user_id:
+        return
+
+    emit("kicked", {}, room=target_member["sid"])
+    disconnect(sid=target_member["sid"])
 
 
 @socketio.on("call_invite")

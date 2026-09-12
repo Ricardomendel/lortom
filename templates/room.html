@@ -25,6 +25,8 @@
 
     <div class="messages" id="messages"></div>
 
+    <div id="reply-preview" class="reply-preview" style="display: none;"></div>
+
     <div class="inputs">
         <div class="emoji-picker" id="emoji-picker" style="display: none;">
             <div class="emoji-grid" id="emoji-grid"></div>
@@ -42,6 +44,8 @@
 
     const messages = document.getElementById("messages");
     const username = "{{ session['name'] }}";
+    const myUserId = "{{ session['user_id'] }}";
+    const isOwner = {{ 'true' if is_owner else 'false' }};
 
     // Derives a stable, pleasant color per name so avatars are consistent across the room.
     const nameToColor = (name) => {
@@ -64,25 +68,75 @@
         return div.innerHTML;
     };
 
+    const truncate = (str, maxLen) => (str.length > maxLen ? str.slice(0, maxLen) + '…' : str);
+
+    // Maps a server-assigned message id to {name, message} so clicking "Reply"
+    // can quote it without re-parsing escaped HTML back out of the DOM.
+    const messageStore = {};
+
     // Create message function. `msg` is escaped by default; pass isHtml=true only
     // for content we generated ourselves (e.g. the PDF download link), never for
-    // anything that came from another user.
-    const createMessage = (name, msg, isOwnMessage, isHtml = false) => {
+    // anything that came from another user. `serverId`/`replyTo` are omitted for
+    // non-repliable messages like PDF links.
+    const createMessage = (name, msg, isOwnMessage, isHtml = false, serverId = null, replyTo = null) => {
         const messageId = `message-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const alignmentClass = isOwnMessage ? "text-right" : "text-left";
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const safeName = escapeHtml(name);
         const safeMsg = isHtml ? msg : escapeHtml(msg);
+
+        if (serverId && !isHtml) {
+            messageStore[serverId] = { name, message: msg };
+        }
+
+        const replyBtn = (serverId && !isHtml)
+            ? `<button type="button" class="reply-btn" onclick="startReply('${serverId}')" title="Reply">↩</button>`
+            : '';
+        const replyBlock = replyTo
+            ? `<div class="reply-quote">↩ <strong>${escapeHtml(replyTo.name)}</strong>: ${escapeHtml(truncate(replyTo.message, 60))}</div>`
+            : '';
+
         const content = `
         <div class="message ${alignmentClass}" id="${messageId}">
             <div class="avatar" style="background:${nameToColor(name)}">${initialOf(name)}</div>
             <div class="bubble-group">
-                <div class="name">${safeName}<span class="time">${time}</span></div>
+                <div class="name">${safeName}<span class="time">${time}</span>${replyBtn}</div>
+                ${replyBlock}
                 <div class="text">${safeMsg}</div>
             </div>
         </div>`;
         messages.innerHTML += content;
         document.getElementById(messageId).scrollIntoView();
+    };
+
+    // ---- Reply-to-message ----
+    let replyingTo = null; // { id, name, message }
+    const replyPreviewEl = document.getElementById('reply-preview');
+
+    const updateReplyPreview = () => {
+        if (!replyingTo) {
+            replyPreviewEl.style.display = 'none';
+            replyPreviewEl.innerHTML = '';
+            return;
+        }
+        replyPreviewEl.style.display = 'flex';
+        replyPreviewEl.innerHTML = `
+            <div class="reply-preview-text">↩ Replying to <strong>${escapeHtml(replyingTo.name)}</strong>: ${escapeHtml(truncate(replyingTo.message, 80))}</div>
+            <button type="button" class="reply-cancel-btn" onclick="cancelReply()" title="Cancel reply">✕</button>
+        `;
+    };
+
+    const startReply = (serverId) => {
+        const entry = messageStore[serverId];
+        if (!entry) return;
+        replyingTo = { id: serverId, name: entry.name, message: entry.message };
+        updateReplyPreview();
+        document.getElementById('message').focus();
+    };
+
+    const cancelReply = () => {
+        replyingTo = null;
+        updateReplyPreview();
     };
 
     // Copies the room code to the clipboard with brief visual feedback.
@@ -144,15 +198,18 @@
 
     // Handle incoming messages
     socketio.on("message", (data) => {
-        createMessage(data.name, data.message, data.name === username);
+        createMessage(data.name, data.message, data.name === username, false, data.id, data.reply_to);
     });
 
     // Send message
     const sendMessage = () => {
         const message = document.getElementById("message");
         if (message.value == "") return;
-        socketio.emit("message", { data: message.value });
+        const payload = { data: message.value };
+        if (replyingTo) payload.reply_to_id = replyingTo.id;
+        socketio.emit("message", payload);
         message.value = "";
+        cancelReply();
     };
 
     document.getElementById('message').addEventListener('keydown', function(event) {
@@ -170,7 +227,19 @@
         window.location.href = "/home";
     };
 
+    // True once the host has removed us, so the generic disconnect handler
+    // below doesn't also show its "server issue" alert for the same event.
+    let wasKicked = false;
+
+    socketio.on('kicked', () => {
+        wasKicked = true;
+        stopMicCapture();
+        alert('You were removed from this room by the host.');
+        window.location.href = '/home';
+    });
+
     socketio.on("disconnect", () => {
+        if (wasKicked) return;
         alert("Server has encountered an issue. Please leave the room.");
         leaveRoom();
     });
@@ -214,7 +283,27 @@
 
         users.forEach(user => {
             const userItem = document.createElement('div');
-            userItem.textContent = user.name;
+            userItem.className = 'user-list-item';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = user.name;
+            userItem.appendChild(nameSpan);
+
+            if (isOwner && user.user_id !== myUserId) {
+                const kickBtn = document.createElement('button');
+                kickBtn.type = 'button';
+                kickBtn.className = 'kick-btn';
+                kickBtn.textContent = '✕';
+                kickBtn.title = `Remove ${user.name} from the room`;
+                kickBtn.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    if (confirm(`Remove ${user.name} from the room?`)) {
+                        socketio.emit('kick_user', { target_user_id: user.user_id });
+                    }
+                });
+                userItem.appendChild(kickBtn);
+            }
+
             userListDiv.appendChild(userItem);
         });
     };
