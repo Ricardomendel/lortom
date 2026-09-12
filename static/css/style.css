@@ -116,6 +116,29 @@ h2 {
     -webkit-text-fill-color: transparent;
 }
 
+.wave-emoji {
+    display: inline-block;
+    -webkit-text-fill-color: initial;
+    background: none;
+    animation: wave 2.2s ease-in-out infinite;
+    transform-origin: 70% 70%;
+}
+
+@keyframes wave {
+    0%, 60%, 100% { transform: rotate(0deg); }
+    10% { transform: rotate(14deg); }
+    20% { transform: rotate(-8deg); }
+    30% { transform: rotate(14deg); }
+    40% { transform: rotate(-4deg); }
+    50% { transform: rotate(10deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wave-emoji {
+        animation: none;
+    }
+}
+
 h3 {
     text-align: center;
     margin: 0;
@@ -301,10 +324,22 @@ button:active {
     align-items: flex-end;
     gap: 8px;
     max-width: 100%;
+    animation: message-pop 0.22s ease-out;
 }
 
 .message.text-right {
     flex-direction: row-reverse;
+}
+
+@keyframes message-pop {
+    from { opacity: 0; transform: scale(0.92) translateY(6px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .message {
+        animation: none;
+    }
 }
 
 .avatar {
@@ -369,14 +404,14 @@ button:active {
 }
 
 /* ============ Attach / message input ============ */
-#attach-btn {
+#attach-btn, #emoji-btn {
     padding: 0;
     border: none;
     border-radius: 50%;
     background-color: var(--surface-alt);
     color: var(--text);
     cursor: pointer;
-    transition: background-color 0.15s ease;
+    transition: background-color 0.15s ease, transform 0.1s ease;
     flex-shrink: 0;
     width: 42px;
     height: 42px;
@@ -387,8 +422,54 @@ button:active {
     line-height: 1;
 }
 
-#attach-btn:hover {
+#attach-btn:hover, #emoji-btn:hover {
     background-color: var(--border);
+}
+
+#emoji-btn:active {
+    transform: scale(0.9);
+}
+
+.inputs {
+    position: relative;
+}
+
+.emoji-picker {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+    width: 280px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 10px;
+    z-index: 500;
+    animation: incoming-pop 0.15s ease;
+}
+
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+.emoji-option {
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 1.3em;
+    line-height: 1.6;
+    cursor: pointer;
+    padding: 2px 0;
+    transition: background-color 0.1s ease, transform 0.1s ease;
+}
+
+.emoji-option:hover {
+    background-color: var(--surface-alt);
+    transform: scale(1.15);
 }
 
 .muted {
@@ -621,13 +702,49 @@ button:active {
 
 /* ============ Main Welcome Page ============ */
 .welcome-container {
+    position: relative;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     height: 100vh;
+    width: 100%;
     text-align: center;
     padding: 0 20px;
+    overflow: hidden;
+}
+
+.floating-decor {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.float-item {
+    position: absolute;
+    left: var(--x, 50%);
+    top: 100%;
+    font-size: 2.4em;
+    opacity: 0;
+    animation: float-up var(--duration, 9s) ease-in-out infinite;
+    animation-delay: var(--delay, 0s);
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.08));
+}
+
+@keyframes float-up {
+    0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+    12% { opacity: 0.55; }
+    50% { transform: translateY(-48vh) rotate(12deg); }
+    88% { opacity: 0.3; }
+    100% { transform: translateY(-92vh) rotate(-10deg); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .float-item {
+        animation: none;
+        display: none;
+    }
 }
 
 .welcome-message {

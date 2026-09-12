@@ -26,8 +26,12 @@
     <div class="messages" id="messages"></div>
 
     <div class="inputs">
+        <div class="emoji-picker" id="emoji-picker" style="display: none;">
+            <div class="emoji-grid" id="emoji-grid"></div>
+        </div>
         <input type="file" id="file-input" accept=".pdf" style="display: none;">
         <button type="button" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach a PDF">📎</button>
+        <button type="button" id="emoji-btn" title="Insert an emoji">😊</button>
         <input type="text" placeholder="Message" name="message" id="message" required>
         <button type="button" name="send" id="send-btn" onclick="sendMessage()">Send</button>
     </div>
@@ -51,17 +55,30 @@
 
     const initialOf = (name) => (name ? name.trim().charAt(0).toUpperCase() : "?");
 
-    // Create message function
-    const createMessage = (name, msg, isOwnMessage) => {
+    // Escapes text for safe insertion into innerHTML. Chat messages are untrusted
+    // user input (from anyone in the room) -- without this, someone could type
+    // HTML/script tags and run arbitrary JS in every other member's browser.
+    const escapeHtml = (str) => {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    };
+
+    // Create message function. `msg` is escaped by default; pass isHtml=true only
+    // for content we generated ourselves (e.g. the PDF download link), never for
+    // anything that came from another user.
+    const createMessage = (name, msg, isOwnMessage, isHtml = false) => {
         const messageId = `message-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const alignmentClass = isOwnMessage ? "text-right" : "text-left";
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const safeName = escapeHtml(name);
+        const safeMsg = isHtml ? msg : escapeHtml(msg);
         const content = `
         <div class="message ${alignmentClass}" id="${messageId}">
             <div class="avatar" style="background:${nameToColor(name)}">${initialOf(name)}</div>
             <div class="bubble-group">
-                <div class="name">${name}<span class="time">${time}</span></div>
-                <div class="text">${msg}</div>
+                <div class="name">${safeName}<span class="time">${time}</span></div>
+                <div class="text">${safeMsg}</div>
             </div>
         </div>`;
         messages.innerHTML += content;
@@ -77,6 +94,53 @@
             setTimeout(() => { el.textContent = original; }, 1200);
         });
     };
+
+    // ---- Emoji picker ----
+    const EMOJI_LIST = [
+        '😀', '😂', '🤣', '😊', '😍', '😘', '😎', '🤔', '😢', '😭',
+        '😡', '😱', '🥳', '😴', '🤗', '😇', '🙄', '😬', '🤯', '😜',
+        '🤤', '🤢', '👀', '😏', '🙃', '😅', '🥰', '😳', '🤩', '😞',
+        '👍', '👎', '👏', '🙏', '💪', '👋', '🤝', '✌️', '🤞', '👌',
+        '❤️', '💔', '🔥', '🎉', '✨', '⭐', '💯', '💕', '💤', '💡',
+        '🍕', '☕', '🎂', '🌍', '🚀', '⚽', '🎵', '📸', '✅', '❌',
+        '⏰', '📌', '🙌', '😆', '😉', '🤦', '🤷', '👀', '🥲', '😌'
+    ];
+
+    const emojiBtn = document.getElementById('emoji-btn');
+    const emojiPicker = document.getElementById('emoji-picker');
+    const emojiGrid = document.getElementById('emoji-grid');
+    const messageInput = document.getElementById('message');
+
+    EMOJI_LIST.forEach((emoji) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'emoji-option';
+        btn.textContent = emoji;
+        btn.addEventListener('click', () => insertEmoji(emoji));
+        emojiGrid.appendChild(btn);
+    });
+
+    const insertEmoji = (emoji) => {
+        const start = messageInput.selectionStart ?? messageInput.value.length;
+        const end = messageInput.selectionEnd ?? messageInput.value.length;
+        const text = messageInput.value;
+        messageInput.value = text.slice(0, start) + emoji + text.slice(end);
+        const newPos = start + emoji.length;
+        messageInput.focus();
+        messageInput.setSelectionRange(newPos, newPos);
+        emojiPicker.style.display = 'none';
+    };
+
+    emojiBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        emojiPicker.style.display = emojiPicker.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.addEventListener('click', (event) => {
+        if (emojiPicker.style.display !== 'none' && !emojiPicker.contains(event.target) && event.target !== emojiBtn) {
+            emojiPicker.style.display = 'none';
+        }
+    });
 
     // Handle incoming messages
     socketio.on("message", (data) => {
@@ -133,7 +197,7 @@
         link.href = data.file_url;
         link.textContent = `Download ${data.filename}`;
         link.download = data.filename;
-        createMessage(data.name, link.outerHTML, data.name === username);
+        createMessage(data.name, link.outerHTML, data.name === username, true);
     });
 
     // Toggle user list
