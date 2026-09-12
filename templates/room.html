@@ -14,6 +14,15 @@
     </div>
     <div id="live-transcript" class="muted"></div>
 
+    <div id="incoming-call-overlay" class="incoming-call-overlay" style="display: none;"></div>
+    <div id="incoming-call-banner" class="incoming-call-banner" style="display: none;">
+        <div class="incoming-call-text">📞 <span id="incoming-caller-name"></span> is calling…</div>
+        <div class="incoming-call-actions">
+            <button type="button" class="accept-btn" onclick="acceptCall()">Accept</button>
+            <button type="button" class="decline-btn" onclick="declineCall()">Decline</button>
+        </div>
+    </div>
+
     <div class="messages" id="messages"></div>
 
     <div class="inputs">
@@ -95,6 +104,7 @@
 
     // Leave room
     const leaveRoom = () => {
+        if (callState !== 'idle') socketio.emit('call_leave');
         if (recognition) recognition.stop();
         window.speechSynthesis.cancel();
         socketio.emit("leave");
@@ -182,14 +192,20 @@
     const callStatus = document.getElementById('call-status');
     const callTimerEl = document.getElementById('call-timer');
     const liveTranscript = document.getElementById('live-transcript');
+    const incomingOverlay = document.getElementById('incoming-call-overlay');
+    const incomingBanner = document.getElementById('incoming-call-banner');
+    const incomingCallerNameEl = document.getElementById('incoming-caller-name');
 
     const RecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
-    let inCall = false;
+    // idle -> ringing-out (I'm calling) / ringing-in (someone's calling me) -> in-call
+    let callState = 'idle';
+    let inCall = false; // true only in 'in-call'; gates the mic + auto-speak-translations logic below
     let isMuted = false;
     let isSpeaking = false; // true while a translated reply is being spoken back, to avoid the mic picking it up
     let callSeconds = 0;
     let callTimerInterval = null;
+    let incomingCallerName = null;
 
     const formatCallTime = (totalSeconds) => {
         const m = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
@@ -197,10 +213,86 @@
         return `${m}:${s}`;
     };
 
+    // A ring tone synthesized with the Web Audio API so no audio asset is needed.
+    let ringAudioCtx = null;
+    let ringInterval = null;
+
+    const playRingBeep = () => {
+        if (!ringAudioCtx) ringAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ringAudioCtx.createOscillator();
+        const gain = ringAudioCtx.createGain();
+        osc.frequency.value = 480;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.15, ringAudioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ringAudioCtx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(ringAudioCtx.destination);
+        osc.start();
+        osc.stop(ringAudioCtx.currentTime + 0.35);
+    };
+
+    const startRinging = () => {
+        stopRinging();
+        playRingBeep();
+        ringInterval = setInterval(playRingBeep, 1500);
+    };
+
+    const stopRinging = () => {
+        clearInterval(ringInterval);
+        ringInterval = null;
+    };
+
+    const showIncomingBanner = (callerName) => {
+        incomingCallerName = callerName;
+        incomingCallerNameEl.textContent = callerName;
+        incomingOverlay.style.display = 'block';
+        incomingBanner.style.display = 'flex';
+        startRinging();
+    };
+
+    const hideIncomingBanner = () => {
+        incomingOverlay.style.display = 'none';
+        incomingBanner.style.display = 'none';
+        incomingCallerName = null;
+    };
+
+    // Moves the UI into the fully-connected call state: starts the mic + timer, stops any ringing.
+    const enterCallUI = () => {
+        callState = 'in-call';
+        inCall = true;
+        stopRinging();
+        hideIncomingBanner();
+        try { recognition && recognition.start(); } catch (e) { /* already running */ }
+        callBtn.textContent = '📞 End Call';
+        callBtn.classList.add('in-call');
+        callStatus.textContent = '🔴 In call';
+        muteBtn.style.display = 'inline-block';
+        callSeconds = 0;
+        callTimerEl.textContent = '00:00';
+        callTimerEl.style.display = 'inline';
+        clearInterval(callTimerInterval);
+        callTimerInterval = setInterval(() => {
+            callSeconds++;
+            callTimerEl.textContent = formatCallTime(callSeconds);
+        }, 1000);
+    };
+
+    // Puts the UI into "ringing the room" while we wait for someone to accept.
+    const enterOutgoingRingUI = () => {
+        callState = 'ringing-out';
+        callBtn.textContent = '📵 Cancel';
+        callBtn.classList.add('in-call');
+        callStatus.textContent = '📞 Calling…';
+        startRinging();
+    };
+
     // Resets all call UI/state back to "not in a call", and silences anything mid-playback.
     const resetCallUI = () => {
+        callState = 'idle';
         inCall = false;
         isMuted = false;
+        stopRinging();
+        hideIncomingBanner();
         clearInterval(callTimerInterval);
         callTimerEl.style.display = 'none';
         callBtn.textContent = '📞 Start Call';
@@ -253,27 +345,72 @@
         callBtn.title = 'Live call is not supported in this browser (try Chrome or Edge)';
     }
 
+    // Starts, cancels, or ends a call depending on where we are in the flow.
     const toggleCall = () => {
         if (!recognition) return;
-        if (!inCall) {
-            inCall = true;
-            try { recognition.start(); } catch (e) { /* already running */ }
-            callBtn.textContent = '📞 End Call';
-            callBtn.classList.add('in-call');
-            callStatus.textContent = '🔴 In call';
-            muteBtn.style.display = 'inline-block';
-            callSeconds = 0;
-            callTimerEl.textContent = '00:00';
-            callTimerEl.style.display = 'inline';
-            callTimerInterval = setInterval(() => {
-                callSeconds++;
-                callTimerEl.textContent = formatCallTime(callSeconds);
-            }, 1000);
+        if (callState === 'idle') {
+            socketio.emit('call_invite');
+            enterOutgoingRingUI();
         } else {
-            recognition.stop();
+            // Cancelling an outgoing ring, or hanging up an active call -- both just leave.
+            if (recognition) recognition.stop();
+            socketio.emit('call_leave');
             resetCallUI();
         }
     };
+
+    const acceptCall = () => {
+        socketio.emit('call_accept');
+        enterCallUI();
+    };
+
+    const declineCall = () => {
+        socketio.emit('call_decline');
+        hideIncomingBanner();
+        stopRinging();
+        callState = 'idle';
+    };
+
+    // Someone in the room started a call; show the incoming-call banner unless I'm already in it.
+    socketio.on('call_invite', (data) => {
+        if (callState === 'in-call') return;
+        callState = 'ringing-in';
+        showIncomingBanner(data.name);
+    });
+
+    // Someone (possibly me, echoed back) joined the call.
+    socketio.on('call_accepted', (data) => {
+        if (data.name === username) return; // I already switched to in-call locally when I clicked Accept
+        if (callState === 'ringing-out' || callState === 'ringing-in') {
+            enterCallUI();
+        }
+        if (callState === 'in-call') {
+            callStatus.textContent = `🔴 In call — ${data.name} joined`;
+            setTimeout(() => { if (callState === 'in-call') callStatus.textContent = '🔴 In call'; }, 2000);
+        }
+    });
+
+    // Someone declined my outgoing call.
+    socketio.on('call_declined', (data) => {
+        if (callState === 'ringing-out') {
+            stopRinging();
+            callStatus.textContent = `📵 ${data.name} declined`;
+            setTimeout(() => { if (callState === 'ringing-out') { socketio.emit('call_leave'); resetCallUI(); } }, 2000);
+        }
+    });
+
+    // Someone left the call -- if it was the caller and I hadn't answered yet, stop ringing.
+    socketio.on('call_left', (data) => {
+        if (incomingCallerName === data.name) {
+            hideIncomingBanner();
+            stopRinging();
+            if (callState === 'ringing-in') callState = 'idle';
+        }
+        if (callState === 'in-call') {
+            callStatus.textContent = `🔴 In call — ${data.name} left`;
+            setTimeout(() => { if (callState === 'in-call') callStatus.textContent = '🔴 In call'; }, 2000);
+        }
+    });
 
     const toggleMute = () => {
         isMuted = !isMuted;

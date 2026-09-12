@@ -28,6 +28,18 @@ translator = Translator()
 rooms = {} #Dictionary to store the list of rooms
 files = {} #Dictionary to store the list of files
 
+def safe_translate(text, dest):
+    """Translate text, falling back to the original on failure instead of
+    crashing the whole broadcast loop (one bad translation shouldn't stop
+    every other room member from getting the message). Logs the real error
+    so it's visible in the server logs (e.g. Render's Logs tab) instead of
+    silently showing up as "translation didn't happen"."""
+    try:
+        return translator.translate(text, src='auto', dest=dest).text
+    except Exception as e:
+        app.logger.error(f"Translation to '{dest}' failed: {e}")
+        return text
+
 def generate_unique_code(length):
     while True:
         code = "".join(random.choice(ascii_uppercase) for _ in range(length))
@@ -37,6 +49,9 @@ def generate_unique_code(length):
 
 def generate_unique_id(length=8):
     return ''.join(random.choice(ascii_uppercase + digits) for _ in range(length))
+
+def new_room():
+    return {"members": [], "messages": [], "call_participants": set()}
 
 @app.route("/", methods=["POST", "GET"])
 def main():
@@ -62,7 +77,7 @@ def home():
         room = code
         if create != False:
             room = generate_unique_code(4)
-            rooms[room] = {"members": [], "messages": []}
+            rooms[room] = new_room()
         elif code not in rooms:
             return render_template("home.html", error="Room does not exist.", code=code, name=name)
 
@@ -104,7 +119,7 @@ def handle_message(data):
 
     for member in rooms[room]["members"]:
         user_language = member["language"]
-        translated_message = translator.translate(original_message, src='auto', dest=user_language).text
+        translated_message = safe_translate(original_message, user_language)
 
         translated_content = {
             "name": sender_name,
@@ -126,7 +141,7 @@ def connect(auth):
         return
 
     if room not in rooms:
-        rooms[room] = {"members": [], "messages": []}
+        rooms[room] = new_room()
 
     join_room(room)
 
@@ -138,13 +153,13 @@ def connect(auth):
 
     # Send existing messages to the newly connected user
     for message in rooms[room]["messages"]:
-        translated_message = translator.translate(message["message"], src='auto', dest=language).text
+        translated_message = safe_translate(message["message"], language)
         emit("message", {"name": message["name"], "message": translated_message}, room=sid)
 
     # Broadcast a message that the user has joined the room
     for member in rooms[room]["members"]:
         user_language = member["language"]
-        connect_message = translator.translate(f"{name} has entered the room", src='auto', dest=user_language).text
+        connect_message = safe_translate(f"{name} has entered the room", user_language)
         emit("message", {"name": name, "message": connect_message}, room=member["sid"])
 
 
@@ -174,8 +189,57 @@ def disconnect():
             # Broadcast a message that the user has left the room
             for member in rooms[room]["members"]:
                 user_language = member["language"]
-                disconnect_message = translator.translate(f"{name} has left the room", src='auto', dest=user_language).text
+                disconnect_message = safe_translate(f"{name} has left the room", user_language)
                 emit("message", {"name": name, "message": disconnect_message}, room=member["sid"])
+
+            # If they dropped off mid-call, let the other participants know so
+            # their UI updates instead of thinking a silent participant is still there.
+            if room in rooms and sid in rooms[room]["call_participants"]:
+                rooms[room]["call_participants"].discard(sid)
+                emit("call_left", {"name": name}, room=room)
+
+
+@socketio.on("call_invite")
+def handle_call_invite():
+    """Caller starts ringing everyone else currently in the room."""
+    room = session.get("room")
+    name = session.get("name")
+    if room not in rooms or not name:
+        return
+    rooms[room]["call_participants"].add(request.sid)
+    emit("call_invite", {"name": name}, room=room, include_self=False)
+
+
+@socketio.on("call_accept")
+def handle_call_accept():
+    """A callee picked up; they join the call and everyone hears about it."""
+    room = session.get("room")
+    name = session.get("name")
+    if room not in rooms or not name:
+        return
+    rooms[room]["call_participants"].add(request.sid)
+    emit("call_accepted", {"name": name}, room=room)
+
+
+@socketio.on("call_decline")
+def handle_call_decline():
+    """A callee declined; only the caller(s) need to know."""
+    room = session.get("room")
+    name = session.get("name")
+    if room not in rooms or not name:
+        return
+    emit("call_declined", {"name": name}, room=room, include_self=False)
+
+
+@socketio.on("call_leave")
+def handle_call_leave():
+    """Someone hung up; if they were the last one in the call, it's over for everyone."""
+    room = session.get("room")
+    name = session.get("name")
+    if room not in rooms or not name:
+        return
+    rooms[room]["call_participants"].discard(request.sid)
+    emit("call_left", {"name": name}, room=room)
 import unicodedata
 
 def clean_text(text):
@@ -230,7 +294,7 @@ def handle_pdf_file(data):
     # Translate the TXT file content for each user
     for member in rooms.get(room, {}).get("members", []):
         user_language = member["language"]
-        translated_text = translator.translate(text_content, src='auto', dest=user_language).text
+        translated_text = safe_translate(text_content, user_language)
         translated_txt_file = BytesIO(translated_text.encode('utf-8'))
         translated_txt_filename = f"{filename.replace('.pdf', f'_{user_language}.txt')}"
 
@@ -253,7 +317,7 @@ def handle_pdf_file(data):
 def notify_server_error(room, message):
     for member in rooms.get(room, {}).get("members", []):
         user_language = member["language"]
-        translated_message = translator.translate(message, src='auto', dest=user_language).text
+        translated_message = safe_translate(message, user_language)
         emit("server_error", {"message": translated_message}, room=member["sid"])
 
 if __name__ == "__main__":
