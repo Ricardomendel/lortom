@@ -3,14 +3,9 @@ from flask_socketio import join_room, leave_room, send, SocketIO, emit
 from dotenv import load_dotenv
 import os
 import random
+import html
+import requests
 from string import ascii_uppercase, digits
-import googletrans
-from googletrans import Translator
-
-# googletrans==3.1.0a0 ships a hardcoded language list that predates Google
-# Translate's 2022 addition of Akan and other languages; the live API supports
-# it, so the client-side validation just needs to be told about it.
-googletrans.LANGUAGES['ak'] = 'akan'
 from flask_cors import CORS
 import PyPDF2
 from io import BytesIO
@@ -23,27 +18,43 @@ CORS(app)
 app.config["FLASK_DEBUG"] = os.environ.get("FLASK_DEBUG")
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
-translator = Translator()
+
+GOOGLE_TRANSLATE_API_KEY = os.environ.get("GOOGLE_TRANSLATE_API_KEY")
+GOOGLE_TRANSLATE_URL = "https://translation.googleapis.com/language/translate/v2"
 
 rooms = {} #Dictionary to store the list of rooms
 files = {} #Dictionary to store the list of files
 
 def safe_translate(text, dest):
-    """Translate text, falling back to the original on failure instead of
-    crashing the whole broadcast loop (one bad translation shouldn't stop
-    every other room member from getting the message).
+    """Translate text via the official Google Cloud Translation API, falling
+    back to the original text on failure instead of crashing the whole
+    broadcast loop (one bad translation shouldn't stop every other room
+    member from getting the message).
+
+    We previously used the unofficial `googletrans` package, which scrapes
+    Google Translate's web frontend rather than calling a real API. Google
+    silently declined to translate requests coming from Render's datacenter
+    IP range (returning the input text unchanged, with no error) -- a known
+    failure mode for that kind of unofficial client in cloud environments.
+    This uses the real, supported API instead.
 
     Logs every call at WARNING level (not just failures) with the input and
-    output side by side, so a production issue shows up as one of exactly
-    three cases in the logs: an exception (network/library problem), output
-    identical to input (Google's endpoint accepted the request but silently
-    declined to translate it -- a known behavior when it treats the request
-    as automated traffic), or output that differs (translation is working
-    and the bug is elsewhere, e.g. the wrong language being requested).
-    WARNING is used deliberately: Python's root logger defaults to WARNING,
-    so this stays visible even if INFO-level logs are being swallowed."""
+    output side by side, so a production issue is immediately visible in the
+    logs. WARNING is used deliberately: Python's root logger defaults to
+    WARNING, so this stays visible even if INFO-level logs are being
+    swallowed."""
+    if not GOOGLE_TRANSLATE_API_KEY:
+        app.logger.warning("[translate] GOOGLE_TRANSLATE_API_KEY is not set; returning original text")
+        return text
     try:
-        result = translator.translate(text, src='auto', dest=dest).text
+        response = requests.post(
+            GOOGLE_TRANSLATE_URL,
+            params={"key": GOOGLE_TRANSLATE_API_KEY},
+            json={"q": text, "target": dest, "format": "text"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        result = html.unescape(response.json()["data"]["translations"][0]["translatedText"])
         app.logger.warning(f"[translate] dest={dest!r} in={text[:60]!r} out={result[:60]!r}")
         return result
     except Exception as e:
