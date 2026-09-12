@@ -4,6 +4,11 @@
     <div class="welcome-container">
         <div class="welcome-message" id="welcome-text">Welcome to LorTam</div>
         <div class="language-text" id="language-text"></div>
+        <div class="feature-pills">
+            <span class="pill">🌍 Real-time translation</span>
+            <span class="pill">📞 Live translated calls</span>
+            <span class="pill">📄 PDF translation</span>
+        </div>
         <div class="enter-room">
             <a href="/room">Enter a Chat Room</a>
         </div>
@@ -43,13 +48,22 @@
 
         let currentIndex = 0;
 
+        // Restarts the CSS fade-in animation so each language swap animates in, not just the first.
+        const replay = (el) => {
+            el.style.animation = 'none';
+            void el.offsetWidth;
+            el.style.animation = '';
+        };
+
         function changeLanguage() {
             currentIndex = (currentIndex + 1) % translations.length;
             const translation = translations[currentIndex];
             welcomeText.textContent = translation.text;
             languageText.textContent = `(${translation.language})`;
+            replay(welcomeText);
+            replay(languageText);
         }
 
-        setInterval(changeLanguage, 1000);
+        setInterval(changeLanguage, 1800);
     </script>
 {% endblock %}

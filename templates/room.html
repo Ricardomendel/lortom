@@ -1,21 +1,27 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="message-box">
-    <h3>Chat Room: {{ code }}</h3>
+    <h3>Chat Room <span class="room-code" id="room-code" onclick="copyRoomCode()" title="Click to copy the room code">{{ code }}</span></h3>
     <button type="button" id="leave-btn" onclick="leaveRoom()">Leave Room</button>
     <div id="user-count" onclick="toggleUserList()">Users: <span id="active-users">0</span></div>
     <div id="user-list" style="display: none;"></div>
     
+    <div class="call-bar">
+        <span id="call-status" class="call-status">📞 Not in a call</span>
+        <span id="call-timer" class="call-timer" style="display: none;">00:00</span>
+        <button type="button" id="call-btn" onclick="toggleCall()">📞 Start Call</button>
+        <button type="button" id="mute-btn" onclick="toggleMute()" style="display: none;">Mute</button>
+    </div>
+    <div id="live-transcript" class="muted"></div>
+
     <div class="messages" id="messages"></div>
-    
+
     <div class="inputs">
         <input type="file" id="file-input" accept=".pdf" style="display: none;">
-        <button type="button" id="attach-btn" onclick="document.getElementById('file-input').click()">Attach .pdf</button>
-        <button type="button" id="mic-btn" onclick="toggleVoice()">🎤 Live Voice</button>
+        <button type="button" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach a PDF">📎</button>
         <input type="text" placeholder="Message" name="message" id="message" required>
         <button type="button" name="send" id="send-btn" onclick="sendMessage()">Send</button>
     </div>
-    <div id="live-transcript" class="muted"></div>
 </div>
 
 <script type="text/javascript">
@@ -24,23 +30,50 @@
     const messages = document.getElementById("messages");
     const username = "{{ session['name'] }}";
 
+    // Derives a stable, pleasant color per name so avatars are consistent across the room.
+    const nameToColor = (name) => {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const hue = Math.abs(hash) % 360;
+        return `hsl(${hue}, 62%, 46%)`;
+    };
+
+    const initialOf = (name) => (name ? name.trim().charAt(0).toUpperCase() : "?");
+
     // Create message function
     const createMessage = (name, msg, isOwnMessage) => {
-        const messageId = `message-${Date.now()}`;
+        const messageId = `message-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const alignmentClass = isOwnMessage ? "text-right" : "text-left";
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const content = `
         <div class="message ${alignmentClass}" id="${messageId}">
-            <div class="name">${name}</div>
-            <div class="text">${msg}</div>
+            <div class="avatar" style="background:${nameToColor(name)}">${initialOf(name)}</div>
+            <div class="bubble-group">
+                <div class="name">${name}<span class="time">${time}</span></div>
+                <div class="text">${msg}</div>
+            </div>
         </div>`;
         messages.innerHTML += content;
         document.getElementById(messageId).scrollIntoView();
     };
 
+    // Copies the room code to the clipboard with brief visual feedback.
+    const copyRoomCode = () => {
+        const el = document.getElementById('room-code');
+        navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+            const original = el.textContent;
+            el.textContent = 'Copied!';
+            setTimeout(() => { el.textContent = original; }, 1200);
+        });
+    };
+
     // Handle incoming messages
     socketio.on("message", (data) => {
         createMessage(data.name, data.message, data.name === username);
-        if (data.is_voice && data.name !== username) {
+        // Only speak translated voice messages aloud if this user has joined the call themselves.
+        if (data.is_voice && data.name !== username && inCall) {
             speak(data.message);
         }
     });
@@ -62,6 +95,8 @@
 
     // Leave room
     const leaveRoom = () => {
+        if (recognition) recognition.stop();
+        window.speechSynthesis.cancel();
         socketio.emit("leave");
         window.location.href = "/home";
     };
@@ -142,13 +177,40 @@
     };
     const speechLangTag = (code) => SPEECH_LANG_MAP[code] || code;
 
-    const micBtn = document.getElementById('mic-btn');
+    const callBtn = document.getElementById('call-btn');
+    const muteBtn = document.getElementById('mute-btn');
+    const callStatus = document.getElementById('call-status');
+    const callTimerEl = document.getElementById('call-timer');
     const liveTranscript = document.getElementById('live-transcript');
 
     const RecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
-    let voiceActive = false;
+    let inCall = false;
+    let isMuted = false;
     let isSpeaking = false; // true while a translated reply is being spoken back, to avoid the mic picking it up
+    let callSeconds = 0;
+    let callTimerInterval = null;
+
+    const formatCallTime = (totalSeconds) => {
+        const m = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const s = String(totalSeconds % 60).padStart(2, '0');
+        return `${m}:${s}`;
+    };
+
+    // Resets all call UI/state back to "not in a call", and silences anything mid-playback.
+    const resetCallUI = () => {
+        inCall = false;
+        isMuted = false;
+        clearInterval(callTimerInterval);
+        callTimerEl.style.display = 'none';
+        callBtn.textContent = '📞 Start Call';
+        callBtn.classList.remove('in-call');
+        callStatus.textContent = '📞 Not in a call';
+        muteBtn.style.display = 'none';
+        muteBtn.textContent = 'Mute';
+        liveTranscript.textContent = '';
+        window.speechSynthesis.cancel();
+    };
 
     if (RecognitionClass) {
         recognition = new RecognitionClass();
@@ -174,43 +236,62 @@
         recognition.onerror = (event) => {
             console.error('Speech recognition error:', event.error);
             if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                alert('Microphone access was blocked. Please allow microphone access to use Live Voice.');
-                voiceActive = false;
-                micBtn.classList.remove('active');
-                micBtn.textContent = '🎤 Live Voice';
+                alert('Microphone access was blocked. Please allow microphone access to make a call.');
+                resetCallUI();
             }
         };
 
+        // The API auto-stops after a pause in speech; restart it as long as the call is still active.
         recognition.onend = () => {
             liveTranscript.textContent = '';
-            if (voiceActive && !isSpeaking) {
+            if (inCall && !isMuted && !isSpeaking) {
                 try { recognition.start(); } catch (e) { /* already running */ }
             }
         };
     } else {
-        micBtn.disabled = true;
-        micBtn.title = 'Live voice is not supported in this browser (try Chrome or Edge)';
+        callBtn.disabled = true;
+        callBtn.title = 'Live call is not supported in this browser (try Chrome or Edge)';
     }
 
-    const toggleVoice = () => {
+    const toggleCall = () => {
         if (!recognition) return;
-        voiceActive = !voiceActive;
-        if (voiceActive) {
+        if (!inCall) {
+            inCall = true;
             try { recognition.start(); } catch (e) { /* already running */ }
-            micBtn.classList.add('active');
-            micBtn.textContent = '🔴 Listening...';
+            callBtn.textContent = '📞 End Call';
+            callBtn.classList.add('in-call');
+            callStatus.textContent = '🔴 In call';
+            muteBtn.style.display = 'inline-block';
+            callSeconds = 0;
+            callTimerEl.textContent = '00:00';
+            callTimerEl.style.display = 'inline';
+            callTimerInterval = setInterval(() => {
+                callSeconds++;
+                callTimerEl.textContent = formatCallTime(callSeconds);
+            }, 1000);
         } else {
             recognition.stop();
-            micBtn.classList.remove('active');
-            micBtn.textContent = '🎤 Live Voice';
-            liveTranscript.textContent = '';
+            resetCallUI();
+        }
+    };
+
+    const toggleMute = () => {
+        isMuted = !isMuted;
+        if (isMuted) {
+            recognition.stop();
+            muteBtn.textContent = 'Unmute';
+            callStatus.textContent = '🔇 Muted';
+        } else {
+            try { recognition.start(); } catch (e) { /* already running */ }
+            muteBtn.textContent = 'Mute';
+            callStatus.textContent = '🔴 In call';
         }
     };
 
     // Speaks a translated message aloud, pausing the mic first so it doesn't hear itself.
     const speak = (text) => {
         if (!('speechSynthesis' in window)) return;
-        if (voiceActive && recognition) {
+        if (inCall && !isMuted && recognition) {
             isSpeaking = true;
             recognition.stop();
         }
@@ -218,16 +299,11 @@
         utterance.lang = speechLangTag(myLanguage);
         utterance.onend = () => {
             isSpeaking = false;
-            if (voiceActive && recognition) {
+            if (inCall && !isMuted && recognition) {
                 try { recognition.start(); } catch (e) { /* already running */ }
             }
         };
         window.speechSynthesis.speak(utterance);
     };
 </script>
-{% for msg in messages %}
-<script type="text/javascript">
-    createMessage("{{ msg.name }}", "{{ msg.message }}");
-</script>
-{% endfor %}
 {% endblock %}

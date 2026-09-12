@@ -80,7 +80,7 @@ def room():
     if room is None or session.get("name") is None or room not in rooms:
         return redirect(url_for("home"))
 
-    return render_template("room.html", code=room, messages=rooms[room]["messages"])
+    return render_template("room.html", code=room)
 
 @app.route('/help')
 def help_page():
@@ -259,7 +259,7 @@ def notify_server_error(room, message):
 if __name__ == "__main__":
     try:
         port = int(os.environ.get('PORT', 5000))
-        socketio.run(app, host='0.0.0.0', port=5000)
+        socketio.run(app, host='0.0.0.0', port=port)
     except Exception as e:
         for room in rooms:
             notify_server_error(room, "Server encountered an issue. Please leave the room.")
