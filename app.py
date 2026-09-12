@@ -61,6 +61,91 @@ def safe_translate(text, dest):
         app.logger.warning(f"[translate] dest={dest!r} in={text[:60]!r} FAILED: {e}")
         return text
 
+GOOGLE_SPEECH_TO_TEXT_URL = "https://speech.googleapis.com/v1/speech:recognize"
+GOOGLE_TEXT_TO_SPEECH_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
+
+# Cloud Speech-to-Text and Text-to-Speech need a full BCP-47 locale (e.g. "es-ES"),
+# not the bare language code our language picker uses (e.g. "es").
+SPEECH_LANG_MAP = {
+    'en': 'en-US', 'es': 'es-ES', 'fr': 'fr-FR', 'de': 'de-DE', 'it': 'it-IT', 'pt': 'pt-PT', 'ak': 'ak-GH',
+    'ru': 'ru-RU', 'ja': 'ja-JP', 'ko': 'ko-KR', 'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW',
+    'ar': 'ar-SA', 'hi': 'hi-IN', 'nl': 'nl-NL', 'pl': 'pl-PL', 'tr': 'tr-TR', 'vi': 'vi-VN',
+    'th': 'th-TH', 'id': 'id-ID', 'sv': 'sv-SE', 'da': 'da-DK', 'fi': 'fi-FI', 'no': 'nb-NO',
+    'el': 'el-GR', 'he': 'he-IL', 'cs': 'cs-CZ', 'ro': 'ro-RO', 'hu': 'hu-HU', 'uk': 'uk-UA',
+    'bg': 'bg-BG', 'hr': 'hr-HR', 'sk': 'sk-SK', 'ca': 'ca-ES', 'ms': 'ms-MY', 'tl': 'fil-PH',
+    'bn': 'bn-BD', 'ta': 'ta-IN', 'te': 'te-IN', 'ml': 'ml-IN', 'mr': 'mr-IN', 'gu': 'gu-IN',
+    'kn': 'kn-IN', 'pa': 'pa-IN', 'ur': 'ur-PK', 'fa': 'fa-IR', 'sr': 'sr-RS', 'sl': 'sl-SI',
+    'lt': 'lt-LT', 'lv': 'lv-LV', 'et': 'et-EE', 'is': 'is-IS', 'sw': 'sw-KE', 'af': 'af-ZA',
+    'am': 'am-ET', 'az': 'az-AZ', 'eu': 'eu-ES', 'be': 'be-BY', 'bs': 'bs-BA', 'gl': 'gl-ES',
+    'ka': 'ka-GE', 'km': 'km-KH', 'lo': 'lo-LA', 'mk': 'mk-MK', 'mn': 'mn-MN', 'ne': 'ne-NP',
+    'si': 'si-LK', 'so': 'so-SO', 'uz': 'uz-UZ', 'zu': 'zu-ZA', 'xh': 'xh-ZA', 'cy': 'cy-GB',
+    'ga': 'ga-IE', 'mt': 'mt-MT', 'my': 'my-MM',
+}
+
+def speech_lang_tag(code):
+    return SPEECH_LANG_MAP.get(code, code)
+
+def stt_encoding_for_mime(mime):
+    mime = (mime or '').lower()
+    if 'ogg' in mime:
+        return 'OGG_OPUS'
+    if 'mp3' in mime or 'mpeg' in mime:
+        return 'MP3'
+    return 'WEBM_OPUS'
+
+def speech_to_text(audio_b64, mime, lang_code):
+    """Transcribes a short audio clip via Cloud Speech-to-Text. Returns None on
+    failure or silence -- both are expected/frequent (most VAD-segmented clips
+    from a live mic are background noise), so this doesn't raise."""
+    if not GOOGLE_TRANSLATE_API_KEY:
+        app.logger.warning("[speech-to-text] GOOGLE_TRANSLATE_API_KEY is not set")
+        return None
+    try:
+        response = requests.post(
+            GOOGLE_SPEECH_TO_TEXT_URL,
+            params={"key": GOOGLE_TRANSLATE_API_KEY},
+            json={
+                "config": {
+                    "encoding": stt_encoding_for_mime(mime),
+                    "languageCode": lang_code,
+                },
+                "audio": {"content": audio_b64},
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        results = response.json().get("results", [])
+        if not results:
+            return None
+        transcript = results[0]["alternatives"][0]["transcript"]
+        app.logger.warning(f"[speech-to-text] lang={lang_code!r} transcript={transcript[:60]!r}")
+        return transcript
+    except Exception as e:
+        app.logger.warning(f"[speech-to-text] lang={lang_code!r} FAILED: {e}")
+        return None
+
+def text_to_speech(text, lang_code):
+    """Synthesizes natural speech via Cloud Text-to-Speech. Returns base64-encoded
+    MP3 audio, or None on failure."""
+    if not GOOGLE_TRANSLATE_API_KEY or not text:
+        return None
+    try:
+        response = requests.post(
+            GOOGLE_TEXT_TO_SPEECH_URL,
+            params={"key": GOOGLE_TRANSLATE_API_KEY},
+            json={
+                "input": {"text": text},
+                "voice": {"languageCode": lang_code, "ssmlGender": "NEUTRAL"},
+                "audioConfig": {"audioEncoding": "MP3"},
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json()["audioContent"]
+    except Exception as e:
+        app.logger.warning(f"[text-to-speech] lang={lang_code!r} FAILED: {e}")
+        return None
+
 def generate_unique_code(length):
     while True:
         code = "".join(random.choice(ascii_uppercase) for _ in range(length))
@@ -150,6 +235,39 @@ def handle_message(data):
 
         emit("message", translated_content, room=member["sid"])
         print(f"Sent to {member['name']} ({user_language}): {translated_message}")
+
+@socketio.on("voice_audio")
+def handle_voice_audio(data):
+    """One VAD-segmented utterance from a live call: transcribe it, translate the
+    transcript per recipient, synthesize speech in their language, and send back
+    audio only -- no text is ever shown or stored for call audio."""
+    room = session.get("room")
+    if room not in rooms:
+        return
+
+    sender_name = session.get("name")
+    sender_language = session.get("language")
+    sender_sid = request.sid
+
+    audio_b64 = data.get("content")
+    mime = data.get("mime", "audio/webm")
+    if not audio_b64:
+        return
+
+    transcript = speech_to_text(audio_b64, mime, speech_lang_tag(sender_language))
+    if not transcript or not transcript.strip():
+        return
+
+    for member in rooms[room]["members"]:
+        if member["sid"] == sender_sid:
+            continue  # don't echo the speaker's own voice back to them
+
+        translated_text = safe_translate(transcript, member["language"])
+        audio_content = text_to_speech(translated_text, speech_lang_tag(member["language"]))
+        if not audio_content:
+            continue
+
+        emit("call_audio", {"name": sender_name, "audio": audio_content}, room=member["sid"])
 
 @socketio.on("connect")
 def connect(auth):

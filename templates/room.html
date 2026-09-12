@@ -81,10 +81,6 @@
     // Handle incoming messages
     socketio.on("message", (data) => {
         createMessage(data.name, data.message, data.name === username);
-        // Only speak translated voice messages aloud if this user has joined the call themselves.
-        if (data.is_voice && data.name !== username && inCall) {
-            speak(data.message);
-        }
     });
 
     // Send message
@@ -105,8 +101,7 @@
     // Leave room
     const leaveRoom = () => {
         if (callState !== 'idle') socketio.emit('call_leave');
-        if (recognition) recognition.stop();
-        window.speechSynthesis.cancel();
+        stopMicCapture();
         socketio.emit("leave");
         window.location.href = "/home";
     };
@@ -164,48 +159,47 @@
         updateUserList(data.users);
     });
 
-    // ---- Live voice translation ----
-    // The user's own configured language doubles as the language they speak
-    // (for recognition) and the language they hear translations in (for playback).
-    const myLanguage = "{{ session['language'] }}";
-
-    // Maps Google Translate language codes to BCP-47 tags for the Web Speech API.
-    const SPEECH_LANG_MAP = {
-        en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', it: 'it-IT', pt: 'pt-PT', ak: 'ak-GH',
-        ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', 'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW',
-        ar: 'ar-SA', hi: 'hi-IN', nl: 'nl-NL', pl: 'pl-PL', tr: 'tr-TR', vi: 'vi-VN',
-        th: 'th-TH', id: 'id-ID', sv: 'sv-SE', da: 'da-DK', fi: 'fi-FI', no: 'nb-NO',
-        el: 'el-GR', he: 'he-IL', cs: 'cs-CZ', ro: 'ro-RO', hu: 'hu-HU', uk: 'uk-UA',
-        bg: 'bg-BG', hr: 'hr-HR', sk: 'sk-SK', ca: 'ca-ES', ms: 'ms-MY', tl: 'fil-PH',
-        bn: 'bn-BD', ta: 'ta-IN', te: 'te-IN', ml: 'ml-IN', mr: 'mr-IN', gu: 'gu-IN',
-        kn: 'kn-IN', pa: 'pa-IN', ur: 'ur-PK', fa: 'fa-IR', sr: 'sr-RS', sl: 'sl-SI',
-        lt: 'lt-LT', lv: 'lv-LV', et: 'et-EE', is: 'is-IS', sw: 'sw-KE', af: 'af-ZA',
-        am: 'am-ET', az: 'az-AZ', eu: 'eu-ES', be: 'be-BY', bs: 'bs-BA', gl: 'gl-ES',
-        ka: 'ka-GE', km: 'km-KH', lo: 'lo-LA', mk: 'mk-MK', mn: 'mn-MN', ne: 'ne-NP',
-        si: 'si-LK', so: 'so-SO', uz: 'uz-UZ', zu: 'zu-ZA', xh: 'xh-ZA', cy: 'cy-GB',
-        ga: 'ga-IE', mt: 'mt-MT', my: 'my-MM'
-    };
-    const speechLangTag = (code) => SPEECH_LANG_MAP[code] || code;
+    // ---- Live audio-to-audio call ----
+    // Real speech in, real (translated) speech out -- no text is shown or sent for call audio.
+    // The mic is captured directly, segmented into utterances with simple voice-activity
+    // detection, and each utterance is sent to the server as audio; the server transcribes,
+    // translates, and synthesizes natural speech per recipient, sent back as audio.
 
     const callBtn = document.getElementById('call-btn');
     const muteBtn = document.getElementById('mute-btn');
     const callStatus = document.getElementById('call-status');
     const callTimerEl = document.getElementById('call-timer');
-    const liveTranscript = document.getElementById('live-transcript');
+    const callActivity = document.getElementById('live-transcript'); // repurposed: shows an activity icon only, never words
     const incomingOverlay = document.getElementById('incoming-call-overlay');
     const incomingBanner = document.getElementById('incoming-call-banner');
     const incomingCallerNameEl = document.getElementById('incoming-caller-name');
 
-    const RecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let recognition = null;
+    const micSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+
     // idle -> ringing-out (I'm calling) / ringing-in (someone's calling me) -> in-call
     let callState = 'idle';
-    let inCall = false; // true only in 'in-call'; gates the mic + auto-speak-translations logic below
+    let inCall = false; // true only in 'in-call'
     let isMuted = false;
-    let isSpeaking = false; // true while a translated reply is being spoken back, to avoid the mic picking it up
     let callSeconds = 0;
     let callTimerInterval = null;
     let incomingCallerName = null;
+
+    let micStream = null;
+    let audioCaptureCtx = null;
+    let analyser = null;
+    let vadDataArray = null;
+    let vadCheckInterval = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isSpeechActive = false;
+    let speechStartedAt = null;
+    let silenceStartedAt = null;
+    let isPlayingIncoming = false; // true while translated audio is playing, so we don't capture our own speakers
+
+    const VAD_THRESHOLD = 10;          // RMS-ish level (0-255 scale) above which we consider it speech
+    const SILENCE_HANGOVER_MS = 700;   // how long silence must persist before an utterance is considered finished
+    const MIN_UTTERANCE_MS = 350;      // ignore blips shorter than this (clicks, breaths)
+    const MIN_BLOB_BYTES = 800;        // ignore recordings too small to contain real speech
 
     const formatCallTime = (totalSeconds) => {
         const m = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
@@ -262,7 +256,7 @@
         inCall = true;
         stopRinging();
         hideIncomingBanner();
-        try { recognition && recognition.start(); } catch (e) { /* already running */ }
+        startMicCapture();
         callBtn.textContent = '📞 End Call';
         callBtn.classList.add('in-call');
         callStatus.textContent = '🔴 In call';
@@ -293,6 +287,7 @@
         isMuted = false;
         stopRinging();
         hideIncomingBanner();
+        stopMicCapture();
         clearInterval(callTimerInterval);
         callTimerEl.style.display = 'none';
         callBtn.textContent = '📞 Start Call';
@@ -300,60 +295,155 @@
         callStatus.textContent = '📞 Not in a call';
         muteBtn.style.display = 'none';
         muteBtn.textContent = 'Mute';
-        liveTranscript.textContent = '';
-        window.speechSynthesis.cancel();
+        callActivity.textContent = '';
     };
 
-    if (RecognitionClass) {
-        recognition = new RecognitionClass();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = speechLangTag(myLanguage);
+    if (!micSupported) {
+        callBtn.disabled = true;
+        callBtn.title = 'Live call requires microphone support (try Chrome, Edge, or Firefox)';
+    }
 
-        recognition.onresult = (event) => {
-            let interim = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcript = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    if (transcript.trim()) {
-                        socketio.emit('message', { data: transcript.trim(), is_voice: true });
-                    }
-                } else {
-                    interim += transcript;
+    const pickRecorderMimeType = () => {
+        const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+        for (const type of candidates) {
+            if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) return type;
+        }
+        return '';
+    };
+    const recorderMimeType = pickRecorderMimeType();
+
+    const blobToBase64 = (blob) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+
+    const startNewRecorder = () => {
+        if (!micStream) return;
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(micStream, recorderMimeType ? { mimeType: recorderMimeType } : undefined);
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.start();
+    };
+
+    // Flushes the current recording as one utterance and sends it to the server for
+    // transcription + translation + speech synthesis -- no text ever appears client-side.
+    const stopAndSendUtterance = () => {
+        if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+        const finishedRecorder = mediaRecorder;
+        finishedRecorder.onstop = async () => {
+            if (recordedChunks.length === 0) return;
+            const blob = new Blob(recordedChunks, { type: recorderMimeType || 'audio/webm' });
+            if (blob.size < MIN_BLOB_BYTES) return;
+            const base64 = await blobToBase64(blob);
+            socketio.emit('voice_audio', { content: base64, mime: blob.type });
+        };
+        finishedRecorder.stop();
+    };
+
+    // Voice-activity loop: watches mic volume, segments continuous speech into utterances,
+    // and never runs while incoming audio is playing (so we don't capture our own speaker output).
+    const runVadLoop = () => {
+        if (!analyser) return;
+
+        if (isPlayingIncoming || isMuted || callState !== 'in-call') {
+            if (isSpeechActive) {
+                isSpeechActive = false;
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.onstop = null; // discard, don't send a truncated utterance
+                    mediaRecorder.stop();
                 }
             }
-            liveTranscript.textContent = interim;
-        };
+            return;
+        }
 
-        recognition.onerror = (event) => {
-            console.error('Speech recognition error:', event.error);
-            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                alert('Microphone access was blocked. Please allow microphone access to make a call.');
-                resetCallUI();
-            }
-        };
+        analyser.getByteTimeDomainData(vadDataArray);
+        let sumSquares = 0;
+        for (let i = 0; i < vadDataArray.length; i++) {
+            const v = (vadDataArray[i] - 128) / 128;
+            sumSquares += v * v;
+        }
+        const rms = Math.sqrt(sumSquares / vadDataArray.length) * 255;
+        const now = Date.now();
+        const speaking = rms > VAD_THRESHOLD;
 
-        // The API auto-stops after a pause in speech; restart it as long as the call is still active.
-        recognition.onend = () => {
-            liveTranscript.textContent = '';
-            if (inCall && !isMuted && !isSpeaking) {
-                try { recognition.start(); } catch (e) { /* already running */ }
+        if (speaking) {
+            silenceStartedAt = null;
+            if (!isSpeechActive) {
+                isSpeechActive = true;
+                speechStartedAt = now;
+                startNewRecorder();
+                callActivity.textContent = '🎙️';
             }
-        };
-    } else {
-        callBtn.disabled = true;
-        callBtn.title = 'Live call is not supported in this browser (try Chrome or Edge)';
-    }
+        } else if (isSpeechActive) {
+            if (silenceStartedAt === null) silenceStartedAt = now;
+            if (now - silenceStartedAt > SILENCE_HANGOVER_MS && now - speechStartedAt > MIN_UTTERANCE_MS) {
+                isSpeechActive = false;
+                callActivity.textContent = '';
+                stopAndSendUtterance();
+            }
+        }
+    };
+
+    const startMicCapture = async () => {
+        if (!micSupported) return;
+        try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (e) {
+            alert('Microphone access was blocked. Please allow microphone access to make a call.');
+            resetCallUI();
+            return;
+        }
+        audioCaptureCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioCaptureCtx.createMediaStreamSource(micStream);
+        analyser = audioCaptureCtx.createAnalyser();
+        analyser.fftSize = 512;
+        vadDataArray = new Uint8Array(analyser.fftSize);
+        source.connect(analyser);
+        vadCheckInterval = setInterval(runVadLoop, 100);
+    };
+
+    const stopMicCapture = () => {
+        clearInterval(vadCheckInterval);
+        vadCheckInterval = null;
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.onstop = null;
+            mediaRecorder.stop();
+        }
+        if (micStream) {
+            micStream.getTracks().forEach((t) => t.stop());
+            micStream = null;
+        }
+        if (audioCaptureCtx) {
+            audioCaptureCtx.close();
+            audioCaptureCtx = null;
+        }
+        analyser = null;
+        isSpeechActive = false;
+        callActivity.textContent = '';
+    };
+
+    // Plays translated speech audio received from another call participant.
+    socketio.on('call_audio', (data) => {
+        if (callState !== 'in-call') return;
+        isPlayingIncoming = true;
+        callActivity.textContent = '🔊';
+        const audio = new Audio('data:audio/mpeg;base64,' + data.audio);
+        const done = () => { isPlayingIncoming = false; callActivity.textContent = ''; };
+        audio.onended = done;
+        audio.onerror = done;
+        audio.play().catch(done);
+    });
 
     // Starts, cancels, or ends a call depending on where we are in the flow.
     const toggleCall = () => {
-        if (!recognition) return;
+        if (!micSupported) return;
         if (callState === 'idle') {
             socketio.emit('call_invite');
             enterOutgoingRingUI();
         } else {
             // Cancelling an outgoing ring, or hanging up an active call -- both just leave.
-            if (recognition) recognition.stop();
             socketio.emit('call_leave');
             resetCallUI();
         }
@@ -412,35 +502,17 @@
         }
     });
 
+    // Muting just stops the VAD loop from capturing/sending; the mic stream stays open
+    // so unmuting is instant.
     const toggleMute = () => {
         isMuted = !isMuted;
         if (isMuted) {
-            recognition.stop();
             muteBtn.textContent = 'Unmute';
             callStatus.textContent = '🔇 Muted';
         } else {
-            try { recognition.start(); } catch (e) { /* already running */ }
             muteBtn.textContent = 'Mute';
             callStatus.textContent = '🔴 In call';
         }
-    };
-
-    // Speaks a translated message aloud, pausing the mic first so it doesn't hear itself.
-    const speak = (text) => {
-        if (!('speechSynthesis' in window)) return;
-        if (inCall && !isMuted && recognition) {
-            isSpeaking = true;
-            recognition.stop();
-        }
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = speechLangTag(myLanguage);
-        utterance.onend = () => {
-            isSpeaking = false;
-            if (inCall && !isMuted && recognition) {
-                try { recognition.start(); } catch (e) { /* already running */ }
-            }
-        };
-        window.speechSynthesis.speak(utterance);
     };
 </script>
 {% endblock %}
