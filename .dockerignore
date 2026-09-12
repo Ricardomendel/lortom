@@ -1,0 +1,10 @@
+.git
+.gitignore
+penv
+.venv
+venv
+__pycache__
+*.pyc
+.env
+Diagrams
+readme.md

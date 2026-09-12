@@ -14,6 +14,7 @@ fpdf==1.7.2
 googletrans==3.1.0a0
 greenlet==3.0.3
 gTTS==2.5.4
+gunicorn==22.0.0
 h11==0.9.0
 h2==3.2.0
 hpack==3.0.0

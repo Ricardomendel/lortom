@@ -4,7 +4,13 @@ from dotenv import load_dotenv
 import os
 import random
 from string import ascii_uppercase, digits
+import googletrans
 from googletrans import Translator
+
+# googletrans==3.1.0a0 ships a hardcoded language list that predates Google
+# Translate's 2022 addition of Akan and other languages; the live API supports
+# it, so the client-side validation just needs to be told about it.
+googletrans.LANGUAGES['ak'] = 'akan'
 from flask_cors import CORS
 import PyPDF2
 from io import BytesIO
@@ -88,6 +94,7 @@ def handle_message(data):
 
     sender_name = session.get("name")
     original_message = data["data"]
+    is_voice = bool(data.get("is_voice"))
 
     content = {
         "name": sender_name,
@@ -101,7 +108,8 @@ def handle_message(data):
 
         translated_content = {
             "name": sender_name,
-            "message": translated_message
+            "message": translated_message,
+            "is_voice": is_voice
         }
 
         emit("message", translated_content, room=member["sid"])

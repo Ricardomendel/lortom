@@ -11,9 +11,11 @@
     <div class="inputs">
         <input type="file" id="file-input" accept=".pdf" style="display: none;">
         <button type="button" id="attach-btn" onclick="document.getElementById('file-input').click()">Attach .pdf</button>
+        <button type="button" id="mic-btn" onclick="toggleVoice()">🎤 Live Voice</button>
         <input type="text" placeholder="Message" name="message" id="message" required>
         <button type="button" name="send" id="send-btn" onclick="sendMessage()">Send</button>
     </div>
+    <div id="live-transcript" class="muted"></div>
 </div>
 
 <script type="text/javascript">
@@ -38,6 +40,9 @@
     // Handle incoming messages
     socketio.on("message", (data) => {
         createMessage(data.name, data.message, data.name === username);
+        if (data.is_voice && data.name !== username) {
+            speak(data.message);
+        }
     });
 
     // Send message
@@ -113,6 +118,112 @@
     socketio.on('update_users', (data) => {
         updateUserList(data.users);
     });
+
+    // ---- Live voice translation ----
+    // The user's own configured language doubles as the language they speak
+    // (for recognition) and the language they hear translations in (for playback).
+    const myLanguage = "{{ session['language'] }}";
+
+    // Maps Google Translate language codes to BCP-47 tags for the Web Speech API.
+    const SPEECH_LANG_MAP = {
+        en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE', it: 'it-IT', pt: 'pt-PT', ak: 'ak-GH',
+        ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', 'zh-CN': 'zh-CN', 'zh-TW': 'zh-TW',
+        ar: 'ar-SA', hi: 'hi-IN', nl: 'nl-NL', pl: 'pl-PL', tr: 'tr-TR', vi: 'vi-VN',
+        th: 'th-TH', id: 'id-ID', sv: 'sv-SE', da: 'da-DK', fi: 'fi-FI', no: 'nb-NO',
+        el: 'el-GR', he: 'he-IL', cs: 'cs-CZ', ro: 'ro-RO', hu: 'hu-HU', uk: 'uk-UA',
+        bg: 'bg-BG', hr: 'hr-HR', sk: 'sk-SK', ca: 'ca-ES', ms: 'ms-MY', tl: 'fil-PH',
+        bn: 'bn-BD', ta: 'ta-IN', te: 'te-IN', ml: 'ml-IN', mr: 'mr-IN', gu: 'gu-IN',
+        kn: 'kn-IN', pa: 'pa-IN', ur: 'ur-PK', fa: 'fa-IR', sr: 'sr-RS', sl: 'sl-SI',
+        lt: 'lt-LT', lv: 'lv-LV', et: 'et-EE', is: 'is-IS', sw: 'sw-KE', af: 'af-ZA',
+        am: 'am-ET', az: 'az-AZ', eu: 'eu-ES', be: 'be-BY', bs: 'bs-BA', gl: 'gl-ES',
+        ka: 'ka-GE', km: 'km-KH', lo: 'lo-LA', mk: 'mk-MK', mn: 'mn-MN', ne: 'ne-NP',
+        si: 'si-LK', so: 'so-SO', uz: 'uz-UZ', zu: 'zu-ZA', xh: 'xh-ZA', cy: 'cy-GB',
+        ga: 'ga-IE', mt: 'mt-MT', my: 'my-MM'
+    };
+    const speechLangTag = (code) => SPEECH_LANG_MAP[code] || code;
+
+    const micBtn = document.getElementById('mic-btn');
+    const liveTranscript = document.getElementById('live-transcript');
+
+    const RecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let voiceActive = false;
+    let isSpeaking = false; // true while a translated reply is being spoken back, to avoid the mic picking it up
+
+    if (RecognitionClass) {
+        recognition = new RecognitionClass();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = speechLangTag(myLanguage);
+
+        recognition.onresult = (event) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    if (transcript.trim()) {
+                        socketio.emit('message', { data: transcript.trim(), is_voice: true });
+                    }
+                } else {
+                    interim += transcript;
+                }
+            }
+            liveTranscript.textContent = interim;
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                alert('Microphone access was blocked. Please allow microphone access to use Live Voice.');
+                voiceActive = false;
+                micBtn.classList.remove('active');
+                micBtn.textContent = '🎤 Live Voice';
+            }
+        };
+
+        recognition.onend = () => {
+            liveTranscript.textContent = '';
+            if (voiceActive && !isSpeaking) {
+                try { recognition.start(); } catch (e) { /* already running */ }
+            }
+        };
+    } else {
+        micBtn.disabled = true;
+        micBtn.title = 'Live voice is not supported in this browser (try Chrome or Edge)';
+    }
+
+    const toggleVoice = () => {
+        if (!recognition) return;
+        voiceActive = !voiceActive;
+        if (voiceActive) {
+            try { recognition.start(); } catch (e) { /* already running */ }
+            micBtn.classList.add('active');
+            micBtn.textContent = '🔴 Listening...';
+        } else {
+            recognition.stop();
+            micBtn.classList.remove('active');
+            micBtn.textContent = '🎤 Live Voice';
+            liveTranscript.textContent = '';
+        }
+    };
+
+    // Speaks a translated message aloud, pausing the mic first so it doesn't hear itself.
+    const speak = (text) => {
+        if (!('speechSynthesis' in window)) return;
+        if (voiceActive && recognition) {
+            isSpeaking = true;
+            recognition.stop();
+        }
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = speechLangTag(myLanguage);
+        utterance.onend = () => {
+            isSpeaking = false;
+            if (voiceActive && recognition) {
+                try { recognition.start(); } catch (e) { /* already running */ }
+            }
+        };
+        window.speechSynthesis.speak(utterance);
+    };
 </script>
 {% for msg in messages %}
 <script type="text/javascript">
