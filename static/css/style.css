@@ -1,9 +1,10 @@
 /* ============ Design tokens ============ */
 :root {
     --bg: #f3f4fb;
-    --bg-gradient: linear-gradient(135deg, #eef1ff 0%, #f7f2fb 50%, #eafaf4 100%);
     --surface: #ffffff;
     --surface-alt: #f5f6fb;
+    --glass-bg: rgba(255, 255, 255, 0.68);
+    --glass-border: rgba(255, 255, 255, 0.6);
     --border: #e6e7f2;
     --text: #1c1e2b;
     --text-muted: #6b7085;
@@ -15,33 +16,42 @@
     --danger-dark: #dc2626;
     --bubble-own: #5b5fef;
     --bubble-own-text: #ffffff;
-    --bubble-other: #eef0f7;
+    --bubble-other: rgba(238, 240, 247, 0.85);
     --bubble-other-text: #1c1e2b;
     --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.06);
     --shadow-md: 0 8px 24px rgba(20, 20, 40, 0.08);
-    --shadow-lg: 0 16px 40px rgba(20, 20, 40, 0.14);
+    --shadow-lg: 0 16px 46px rgba(31, 30, 90, 0.16);
     --radius-sm: 8px;
     --radius-md: 14px;
     --radius-lg: 22px;
     --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --aurora-1: rgba(91, 95, 239, 0.42);
+    --aurora-2: rgba(23, 184, 144, 0.36);
+    --aurora-3: rgba(236, 72, 153, 0.30);
+    --aurora-4: rgba(56, 189, 248, 0.30);
 }
 
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-        --bg: #14151f;
-        --bg-gradient: linear-gradient(135deg, #14151f 0%, #191a28 50%, #12181a 100%);
+        --bg: #0d0e16;
         --surface: #1c1e2b;
         --surface-alt: #23253544;
+        --glass-bg: rgba(28, 30, 43, 0.6);
+        --glass-border: rgba(255, 255, 255, 0.08);
         --border: #2b2d3d;
         --text: #eef0f7;
         --text-muted: #9a9fb5;
         --bubble-own: #5b5fef;
         --bubble-own-text: #ffffff;
-        --bubble-other: #2a2c3d;
+        --bubble-other: rgba(42, 44, 61, 0.85);
         --bubble-other-text: #eef0f7;
         --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
         --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
-        --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.45);
+        --shadow-lg: 0 16px 46px rgba(0, 0, 0, 0.5);
+        --aurora-1: rgba(91, 95, 239, 0.35);
+        --aurora-2: rgba(23, 184, 144, 0.28);
+        --aurora-3: rgba(236, 72, 153, 0.22);
+        --aurora-4: rgba(56, 189, 248, 0.24);
     }
 }
 
@@ -50,9 +60,14 @@
 }
 
 /* ============ Base ============ */
+html {
+    background: var(--bg);
+}
+
 body {
+    position: relative;
     font-family: var(--font);
-    background: var(--bg-gradient);
+    background: var(--bg);
     color: var(--text);
     margin: 0;
     padding: 16px;
@@ -61,6 +76,48 @@ body {
     align-items: center;
     min-height: 100vh;
     line-height: 1.5;
+    overflow-x: hidden;
+    isolation: isolate;
+}
+
+/* A soft, drifting mesh of color blobs behind every page -- generated purely
+   in CSS (no image file to load, host, or ever break). */
+body::before {
+    content: '';
+    position: fixed;
+    inset: -15%;
+    z-index: -2;
+    background-image:
+        radial-gradient(circle at 12% 18%, var(--aurora-1), transparent 40%),
+        radial-gradient(circle at 85% 12%, var(--aurora-2), transparent 42%),
+        radial-gradient(circle at 78% 82%, var(--aurora-3), transparent 45%),
+        radial-gradient(circle at 15% 85%, var(--aurora-4), transparent 42%);
+    filter: blur(70px);
+    animation: aurora-drift 24s ease-in-out infinite alternate;
+}
+
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image: radial-gradient(circle, rgba(120, 120, 160, 0.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: radial-gradient(circle at 50% 40%, black, transparent 75%);
+    -webkit-mask-image: radial-gradient(circle at 50% 40%, black, transparent 75%);
+    opacity: 0.5;
+}
+
+@keyframes aurora-drift {
+    0% { transform: translate(0, 0) scale(1) rotate(0deg); }
+    50% { transform: translate(-3%, 3%) scale(1.1) rotate(4deg); }
+    100% { transform: translate(3%, -2%) scale(1.04) rotate(-3deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body::before {
+        animation: none;
+    }
 }
 
 .content {
@@ -83,11 +140,13 @@ form {
     display: flex;
     flex-direction: column;
     gap: 14px;
-    background: var(--surface);
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
     padding: 36px 32px;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
 }
 
 .join, .languages, .field {
@@ -255,9 +314,11 @@ button:active {
 
 /* ============ Chat Room Styles ============ */
 .message-box {
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
-    background-color: var(--surface);
+    background: var(--glass-bg);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
     display: flex;
     flex-direction: column;
     width: 90vw;
@@ -301,6 +362,9 @@ button:active {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    border-radius: var(--radius-md);
+    background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+    background-size: 22px 22px;
 }
 
 .messages::-webkit-scrollbar {
@@ -917,10 +981,12 @@ button:active {
     width: 90vw;
     margin: 0 auto;
     padding: 36px 32px;
-    background-color: var(--surface);
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    border: 1px solid var(--border);
+    border: 1px solid var(--glass-border);
 }
 
 .help-container h2 {
