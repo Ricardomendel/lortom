@@ -1,62 +1,28 @@
+{% set emoji3d = "https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets" %}
 <svg class="hero-illustration" viewBox="0 0 640 260" role="img" aria-label="Two people having a conversation, each seeing it translated into their own language">
-    <defs>
-        <linearGradient id="personA" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#8285f5"/>
-            <stop offset="100%" stop-color="#5b5fef"/>
-        </linearGradient>
-        <linearGradient id="personB" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#2bd1a6"/>
-            <stop offset="100%" stop-color="#17b890"/>
-        </linearGradient>
-        <linearGradient id="brandBadge" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#5b5fef"/>
-            <stop offset="100%" stop-color="#17b890"/>
-        </linearGradient>
-    </defs>
+    <ellipse cx="150" cy="238" rx="62" ry="10" fill="rgba(20,20,50,0.10)"/>
+    <ellipse cx="490" cy="238" rx="62" ry="10" fill="rgba(20,20,50,0.10)"/>
 
-    <ellipse cx="150" cy="245" rx="70" ry="11" fill="rgba(20,20,50,0.08)"/>
-    <ellipse cx="490" cy="245" rx="70" ry="11" fill="rgba(20,20,50,0.08)"/>
+    <!-- Person A: 3D-rendered figure instead of a flat drawn shape -->
+    <image href="{{ emoji3d }}/Woman%20raising%20hand/Default/3D/woman_raising_hand_3d_default.png" x="66" y="72" width="168" height="168"/>
 
-    <!-- Person A -->
-    <g transform="translate(150,150)">
-        <path d="M -55 95 Q -62 20 0 8 Q 62 20 55 95 Z" fill="url(#personA)"/>
-        <path d="M 44 55 Q 82 42 88 6" stroke="url(#personA)" stroke-width="17" fill="none" stroke-linecap="round"/>
-        <circle cx="0" cy="-25" r="38" fill="url(#personA)"/>
-        <circle cx="-12" cy="-28" r="4" fill="#1c1e2b"/>
-        <circle cx="12" cy="-28" r="4" fill="#1c1e2b"/>
-        <path d="M -11 -12 Q 0 -3 11 -12" stroke="#1c1e2b" stroke-width="3.4" fill="none" stroke-linecap="round"/>
-    </g>
-
-    <!-- Person B -->
-    <g transform="translate(490,150) scale(-1,1)">
-        <path d="M -55 95 Q -62 20 0 8 Q 62 20 55 95 Z" fill="url(#personB)"/>
-        <path d="M 44 55 Q 82 42 88 6" stroke="url(#personB)" stroke-width="17" fill="none" stroke-linecap="round"/>
-        <circle cx="0" cy="-25" r="38" fill="url(#personB)"/>
-        <circle cx="-12" cy="-28" r="4" fill="#1c1e2b"/>
-        <circle cx="12" cy="-28" r="4" fill="#1c1e2b"/>
-        <path d="M -11 -12 Q 0 -3 11 -12" stroke="#1c1e2b" stroke-width="3.4" fill="none" stroke-linecap="round"/>
-    </g>
+    <!-- Person B: 3D-rendered figure instead of a flat drawn shape -->
+    <image href="{{ emoji3d }}/Man%20raising%20hand/Default/3D/man_raising_hand_3d_default.png" x="406" y="72" width="168" height="168"/>
 
     <!-- Speech bubble A: English -->
-    <g transform="translate(120,40)">
+    <g transform="translate(115,40)">
         <rect x="-72" y="-32" width="144" height="56" rx="18" fill="var(--surface)" stroke="var(--border)"/>
         <path d="M -6 24 L 6 24 L -2 42 Z" fill="var(--surface)" stroke="var(--border)"/>
         <text x="0" y="4" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="var(--text)">Hello!</text>
     </g>
 
     <!-- Speech bubble B: Spanish -->
-    <g transform="translate(520,40)">
+    <g transform="translate(525,40)">
         <rect x="-72" y="-32" width="144" height="56" rx="18" fill="var(--surface)" stroke="var(--border)"/>
         <path d="M -6 24 L 6 24 L -2 42 Z" fill="var(--surface)" stroke="var(--border)"/>
         <text x="0" y="4" text-anchor="middle" font-family="Inter, sans-serif" font-size="19" font-weight="700" fill="var(--text)">¡Hola!</text>
     </g>
 
-    <!-- Translate badge between them -->
-    <g transform="translate(320,45)">
-        <circle r="27" fill="url(#brandBadge)"/>
-        <path d="M -11 -5 Q 0 -15 11 -5" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/>
-        <path d="M 6 -11 L 11 -5 L 4 -2" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M 11 5 Q 0 15 -11 5" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/>
-        <path d="M -6 11 L -11 5 L -4 2" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
+    <!-- Translate badge between them: a real 3D icon instead of a hand-drawn one -->
+    <image href="{{ emoji3d }}/Counterclockwise%20arrows%20button/3D/counterclockwise_arrows_button_3d.png" x="290" y="15" width="60" height="60"/>
 </svg>
