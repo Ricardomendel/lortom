@@ -208,7 +208,7 @@ a {
 /* ============ Form / card styles ============ */
 form {
     width: 100%;
-    max-width: 440px;
+    max-width: 520px;
 }
 
 /* Full-height split screen: form on the left (over the app's usual subtle
@@ -270,14 +270,28 @@ form {
 .buttons {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 18px;
     background: var(--glass-bg);
     backdrop-filter: blur(24px) saturate(160%);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
-    padding: var(--space-9) var(--space-8);
+    padding: var(--space-10) 44px;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     border: 1px solid var(--glass-border);
+}
+
+/* Bigger inputs/select/buttons specifically within the home form -- scoped
+   here rather than changing the shared input[type=text]/select/button rules
+   directly, since those are also used by the chat room's message input and
+   compact toolbar buttons, which should stay as they are. */
+.buttons input[type="text"], .buttons select {
+    padding: 15px 18px;
+    font-size: 1.05em;
+}
+
+.buttons button {
+    padding: 15px 18px;
+    font-size: 1.05em;
 }
 
 .join, .languages, .field {
@@ -1272,6 +1286,10 @@ button:disabled {
     .enter-room a {
         font-size: 1.1em;
         padding: 14px 28px;
+    }
+
+    .buttons {
+        padding: var(--space-8) var(--space-6);
     }
 
     .hero-illustration {
