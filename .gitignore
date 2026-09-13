@@ -136,3 +136,4 @@ cython_debug/
 .txt
 .docx
 .pdf
+.claude/

@@ -2,23 +2,26 @@
 
 {% block content %}
 <div class="help-container">
-    <h2>Need Help?</h2>
+    <h1 class="heading-brand">Need Help?</h1>
     <p>Here's how to get started with LorTam:</p>
 
     <div class="faq">
-        <h4>1. How do I join a room?</h4>
+        <h2 class="heading-section">1. How do I join a room?</h2>
         <p>Enter your name and the room code (if you have one) on the home screen, then click "Join a Room".</p>
 
-        <h4>2. How do I create a new room?</h4>
+        <h2 class="heading-section">2. How do I create a new room?</h2>
         <p>Just enter your name and click "Create a Room". A new room code will be generated for you.</p>
 
-        <h4>3. How does translation work?</h4>
+        <h2 class="heading-section">3. How does translation work?</h2>
         <p>Messages are automatically translated to the language you selected when joining.</p>
 
-        <h4>4. Can I send files?</h4>
+        <h2 class="heading-section">4. Can I send files?</h2>
         <p>Yes! You can attach and send PDF files directly in the chat room.</p>
     </div>
 
-    <a href="/room" class="back-button">← Back to Home</a>
+    <a href="/room" class="back-button">
+        <span class="material-icons" aria-hidden="true">arrow_back</span>
+        Back to Home
+    </a>
 </div>
 {% endblock %}

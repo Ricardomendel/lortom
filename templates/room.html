@@ -1,25 +1,45 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="message-box">
-    <h3>Chat Room <span class="room-code" id="room-code" onclick="copyRoomCode()" title="Click to copy the room code">{{ code }}</span></h3>
-    <button type="button" id="leave-btn" onclick="leaveRoom()">Leave Room</button>
-    <div id="user-count" onclick="toggleUserList()">Users: <span id="active-users">0</span></div>
+    <h1>Chat Room
+        <button type="button" class="room-code" id="room-code" onclick="copyRoomCode()" aria-label="Copy room code" title="Click to copy the room code">
+            <span id="room-code-text">{{ code }}</span>
+            <span class="material-icons" aria-hidden="true">content_copy</span>
+        </button>
+    </h1>
+    <button type="button" id="leave-btn" class="btn-icon-label" onclick="leaveRoom()">
+        <span class="material-icons" aria-hidden="true">logout</span> Leave Room
+    </button>
+    <button type="button" id="user-count" class="btn-icon-label" onclick="toggleUserList()">Users: <span id="active-users">0</span></button>
     <div id="user-list" style="display: none;"></div>
-    
+
     <div class="call-bar">
-        <span id="call-status" class="call-status">📞 Not in a call</span>
+        <span id="call-status" class="call-status">Not in a call</span>
         <span id="call-timer" class="call-timer" style="display: none;">00:00</span>
-        <button type="button" id="call-btn" onclick="toggleCall()">📞 Start Call</button>
-        <button type="button" id="mute-btn" onclick="toggleMute()" style="display: none;">Mute</button>
+        <button type="button" id="call-btn" class="btn-icon-label" onclick="toggleCall()">
+            <span class="material-icons" id="call-btn-icon" aria-hidden="true">call</span>
+            <span id="call-btn-label">Start Call</span>
+        </button>
+        <button type="button" id="mute-btn" class="btn-icon-label" onclick="toggleMute()" style="display: none;">
+            <span class="material-icons" id="mute-btn-icon" aria-hidden="true">mic_off</span>
+            <span id="mute-btn-label">Mute</span>
+        </button>
     </div>
     <div id="live-transcript" class="muted"></div>
 
     <div id="incoming-call-overlay" class="incoming-call-overlay" style="display: none;"></div>
     <div id="incoming-call-banner" class="incoming-call-banner" style="display: none;">
-        <div class="incoming-call-text">📞 <span id="incoming-caller-name"></span> is calling…</div>
+        <div class="incoming-call-text">
+            <span class="material-icons" aria-hidden="true">call</span>
+            <span id="incoming-caller-name"></span> is calling…
+        </div>
         <div class="incoming-call-actions">
-            <button type="button" class="accept-btn" onclick="acceptCall()">Accept</button>
-            <button type="button" class="decline-btn" onclick="declineCall()">Decline</button>
+            <button type="button" class="accept-btn btn-icon-label" onclick="acceptCall()">
+                <span class="material-icons" aria-hidden="true">call</span> Accept
+            </button>
+            <button type="button" class="decline-btn btn-icon-label" onclick="declineCall()">
+                <span class="material-icons" aria-hidden="true">call_end</span> Decline
+            </button>
         </div>
     </div>
 
@@ -32,10 +52,16 @@
             <div class="emoji-grid" id="emoji-grid"></div>
         </div>
         <input type="file" id="file-input" accept=".pdf" style="display: none;">
-        <button type="button" id="attach-btn" onclick="document.getElementById('file-input').click()" title="Attach a PDF">📎</button>
-        <button type="button" id="emoji-btn" title="Insert an emoji">😊</button>
+        <button type="button" id="attach-btn" onclick="document.getElementById('file-input').click()" aria-label="Attach a PDF" title="Attach a PDF">
+            <span class="material-icons" aria-hidden="true">attach_file</span>
+        </button>
+        <button type="button" id="emoji-btn" aria-label="Insert an emoji" title="Insert an emoji">
+            <span class="material-icons" aria-hidden="true">mood</span>
+        </button>
         <input type="text" placeholder="Message" name="message" id="message" required>
-        <button type="button" name="send" id="send-btn" onclick="sendMessage()">Send</button>
+        <button type="button" name="send" id="send-btn" class="btn-icon-label" onclick="sendMessage()">
+            <span class="material-icons" aria-hidden="true">send</span> Send
+        </button>
     </div>
 </div>
 
@@ -90,10 +116,10 @@
         }
 
         const replyBtn = (serverId && !isHtml)
-            ? `<button type="button" class="reply-btn" onclick="startReply('${serverId}')" title="Reply">↩</button>`
+            ? `<button type="button" class="reply-btn" onclick="startReply('${serverId}')" aria-label="Reply to ${safeName}" title="Reply"><span class="material-icons" aria-hidden="true">reply</span></button>`
             : '';
         const replyBlock = replyTo
-            ? `<div class="reply-quote">↩ <strong>${escapeHtml(replyTo.name)}</strong>: ${escapeHtml(truncate(replyTo.message, 60))}</div>`
+            ? `<div class="reply-quote"><span class="material-icons" aria-hidden="true">reply</span> <strong>${escapeHtml(replyTo.name)}</strong>: ${escapeHtml(truncate(replyTo.message, 60))}</div>`
             : '';
 
         const content = `
@@ -121,8 +147,8 @@
         }
         replyPreviewEl.style.display = 'flex';
         replyPreviewEl.innerHTML = `
-            <div class="reply-preview-text">↩ Replying to <strong>${escapeHtml(replyingTo.name)}</strong>: ${escapeHtml(truncate(replyingTo.message, 80))}</div>
-            <button type="button" class="reply-cancel-btn" onclick="cancelReply()" title="Cancel reply">✕</button>
+            <div class="reply-preview-text"><span class="material-icons" aria-hidden="true">reply</span> Replying to <strong>${escapeHtml(replyingTo.name)}</strong>: ${escapeHtml(truncate(replyingTo.message, 80))}</div>
+            <button type="button" class="reply-cancel-btn" onclick="cancelReply()" aria-label="Cancel reply" title="Cancel reply"><span class="material-icons" aria-hidden="true">close</span></button>
         `;
     };
 
@@ -141,11 +167,11 @@
 
     // Copies the room code to the clipboard with brief visual feedback.
     const copyRoomCode = () => {
-        const el = document.getElementById('room-code');
-        navigator.clipboard.writeText(el.textContent.trim()).then(() => {
-            const original = el.textContent;
-            el.textContent = 'Copied!';
-            setTimeout(() => { el.textContent = original; }, 1200);
+        const textEl = document.getElementById('room-code-text');
+        navigator.clipboard.writeText(textEl.textContent.trim()).then(() => {
+            const original = textEl.textContent;
+            textEl.textContent = 'Copied!';
+            setTimeout(() => { textEl.textContent = original; }, 1200);
         });
     };
 
@@ -293,8 +319,9 @@
                 const kickBtn = document.createElement('button');
                 kickBtn.type = 'button';
                 kickBtn.className = 'kick-btn';
-                kickBtn.textContent = '✕';
+                kickBtn.innerHTML = '<span class="material-icons" aria-hidden="true">close</span>';
                 kickBtn.title = `Remove ${user.name} from the room`;
+                kickBtn.setAttribute('aria-label', `Remove ${user.name} from the room`);
                 kickBtn.addEventListener('click', (event) => {
                     event.stopPropagation();
                     if (confirm(`Remove ${user.name} from the room?`)) {
@@ -319,8 +346,22 @@
     // translates, and synthesizes natural speech per recipient, sent back as audio.
 
     const callBtn = document.getElementById('call-btn');
+    const callBtnIcon = document.getElementById('call-btn-icon');
+    const callBtnLabel = document.getElementById('call-btn-label');
     const muteBtn = document.getElementById('mute-btn');
+    const muteBtnIcon = document.getElementById('mute-btn-icon');
+    const muteBtnLabel = document.getElementById('mute-btn-label');
     const callStatus = document.getElementById('call-status');
+
+    const setCallBtn = (icon, label) => {
+        callBtnIcon.textContent = icon;
+        callBtnLabel.textContent = label;
+    };
+
+    const setMuteBtn = (icon, label) => {
+        muteBtnIcon.textContent = icon;
+        muteBtnLabel.textContent = label;
+    };
     const callTimerEl = document.getElementById('call-timer');
     const callActivity = document.getElementById('live-transcript'); // repurposed: shows an activity icon only, never words
     const incomingOverlay = document.getElementById('incoming-call-overlay');
@@ -410,9 +451,9 @@
         stopRinging();
         hideIncomingBanner();
         startMicCapture();
-        callBtn.textContent = '📞 End Call';
+        setCallBtn('call_end', 'End Call');
         callBtn.classList.add('in-call');
-        callStatus.textContent = '🔴 In call';
+        callStatus.textContent = 'In call';
         muteBtn.style.display = 'inline-block';
         callSeconds = 0;
         callTimerEl.textContent = '00:00';
@@ -427,9 +468,9 @@
     // Puts the UI into "ringing the room" while we wait for someone to accept.
     const enterOutgoingRingUI = () => {
         callState = 'ringing-out';
-        callBtn.textContent = '📵 Cancel';
+        setCallBtn('phone_disabled', 'Cancel');
         callBtn.classList.add('in-call');
-        callStatus.textContent = '📞 Calling…';
+        callStatus.textContent = 'Calling…';
         startRinging();
     };
 
@@ -443,11 +484,11 @@
         stopMicCapture();
         clearInterval(callTimerInterval);
         callTimerEl.style.display = 'none';
-        callBtn.textContent = '📞 Start Call';
+        setCallBtn('call', 'Start Call');
         callBtn.classList.remove('in-call');
-        callStatus.textContent = '📞 Not in a call';
+        callStatus.textContent = 'Not in a call';
         muteBtn.style.display = 'none';
-        muteBtn.textContent = 'Mute';
+        setMuteBtn('mic_off', 'Mute');
         callActivity.textContent = '';
     };
 
@@ -628,8 +669,8 @@
             enterCallUI();
         }
         if (callState === 'in-call') {
-            callStatus.textContent = `🔴 In call — ${data.name} joined`;
-            setTimeout(() => { if (callState === 'in-call') callStatus.textContent = '🔴 In call'; }, 2000);
+            callStatus.textContent = `In call — ${data.name} joined`;
+            setTimeout(() => { if (callState === 'in-call') callStatus.textContent = 'In call'; }, 2000);
         }
     });
 
@@ -637,7 +678,7 @@
     socketio.on('call_declined', (data) => {
         if (callState === 'ringing-out') {
             stopRinging();
-            callStatus.textContent = `📵 ${data.name} declined`;
+            callStatus.textContent = `${data.name} declined`;
             setTimeout(() => { if (callState === 'ringing-out') { socketio.emit('call_leave'); resetCallUI(); } }, 2000);
         }
     });
@@ -650,8 +691,8 @@
             if (callState === 'ringing-in') callState = 'idle';
         }
         if (callState === 'in-call') {
-            callStatus.textContent = `🔴 In call — ${data.name} left`;
-            setTimeout(() => { if (callState === 'in-call') callStatus.textContent = '🔴 In call'; }, 2000);
+            callStatus.textContent = `In call — ${data.name} left`;
+            setTimeout(() => { if (callState === 'in-call') callStatus.textContent = 'In call'; }, 2000);
         }
     });
 
@@ -660,11 +701,11 @@
     const toggleMute = () => {
         isMuted = !isMuted;
         if (isMuted) {
-            muteBtn.textContent = 'Unmute';
-            callStatus.textContent = '🔇 Muted';
+            setMuteBtn('mic', 'Unmute');
+            callStatus.textContent = 'Muted';
         } else {
-            muteBtn.textContent = 'Mute';
-            callStatus.textContent = '🔴 In call';
+            setMuteBtn('mic_off', 'Mute');
+            callStatus.textContent = 'In call';
         }
     };
 </script>

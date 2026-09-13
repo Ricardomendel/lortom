@@ -1,5 +1,6 @@
 /* ============ Design tokens ============ */
 :root {
+    /* -- Color -- */
     --bg: #f3f4fb;
     --surface: #ffffff;
     --surface-alt: #f5f6fb;
@@ -10,10 +11,15 @@
     --text-muted: #6b7085;
     --primary: #5b5fef;
     --primary-dark: #4548c9;
+    /* Text/link color, distinct from --primary: --primary fails AA (4.5:1) as
+       small text on light backgrounds (it's tuned for white-on-primary
+       buttons instead), and needs a different, lighter value in dark mode
+       than --primary-dark (which fails contrast on dark surfaces). */
+    --primary-text: #4548c9;
     --primary-contrast: #ffffff;
     --accent: #17b890;
     --danger: #ef4444;
-    --danger-dark: #dc2626;
+    --danger-dark: #c81e1e;
     --bubble-own: #5b5fef;
     --bubble-own-text: #ffffff;
     --bubble-other: rgba(238, 240, 247, 0.85);
@@ -21,14 +27,55 @@
     --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.06);
     --shadow-md: 0 8px 24px rgba(20, 20, 40, 0.08);
     --shadow-lg: 0 16px 46px rgba(31, 30, 90, 0.16);
-    --radius-sm: 8px;
-    --radius-md: 14px;
-    --radius-lg: 22px;
-    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --aurora-1: rgba(91, 95, 239, 0.42);
     --aurora-2: rgba(23, 184, 144, 0.36);
     --aurora-3: rgba(236, 72, 153, 0.30);
     --aurora-4: rgba(56, 189, 248, 0.30);
+
+    /* -- Shape -- */
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 22px;
+    --radius-full: 999px;
+
+    /* -- Spacing scale (4px base) -- */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-9: 36px;
+    --space-10: 40px;
+
+    /* -- Typography -- */
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --text-xs: 0.75em;
+    --text-sm: 0.85em;
+    --text-base: 1em;
+    --text-md: 1.15em;
+    --text-lg: 1.6em;
+    --text-xl: 2.6em;
+    --text-display: 5em;
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-semibold: 600;
+    --weight-bold: 700;
+    --weight-black: 800;
+
+    /* -- Icon button sizes (WCAG 2.2 AA minimum pointer target is 24x24 CSS
+       px; these give a comfortable margin above that) -- */
+    --icon-btn-lg: 42px;
+    --icon-btn-sm: 28px;
+
+    /* -- z-index scale -- */
+    --z-deep-behind: -2;
+    --z-behind: -1;
+    --z-float: 500;
+    --z-fixed: 1000;
+    --z-overlay: 1999;
+    --z-modal: 2000;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,6 +88,7 @@
         --border: #2b2d3d;
         --text: #eef0f7;
         --text-muted: #9a9fb5;
+        --primary-text: #8b8ef7;
         --bubble-own: #5b5fef;
         --bubble-own-text: #ffffff;
         --bubble-other: rgba(42, 44, 61, 0.85);
@@ -57,6 +105,28 @@
 
 * {
     box-sizing: border-box;
+}
+
+/* ============ Icons ============ */
+/* Real icons instead of emoji for interactive controls: emoji render as
+   font-dependent, uncontrollable-by-CSS colored glyphs that vary across
+   platforms; this icon font's size/color follow the same tokens as
+   surrounding text. Decorative flourishes (the floating background icons,
+   the wave hand, the emoji picker's own contents) are a different case and
+   are left as real emoji deliberately. */
+.material-icons {
+    font-size: var(--text-md);
+    vertical-align: middle;
+    line-height: 1;
+}
+
+/* Buttons that pair an icon with a text label (as opposed to icon-only
+   buttons like #attach-btn) lay out as a row with consistent gap. */
+.btn-icon-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
 }
 
 /* ============ Base ============ */
@@ -86,7 +156,7 @@ body::before {
     content: '';
     position: fixed;
     inset: -15%;
-    z-index: -2;
+    z-index: var(--z-deep-behind);
     background-image:
         radial-gradient(circle at 12% 18%, var(--aurora-1), transparent 40%),
         radial-gradient(circle at 85% 12%, var(--aurora-2), transparent 42%),
@@ -100,7 +170,7 @@ body::after {
     content: '';
     position: fixed;
     inset: 0;
-    z-index: -1;
+    z-index: var(--z-behind);
     background-image: radial-gradient(circle, rgba(120, 120, 160, 0.16) 1px, transparent 1px);
     background-size: 26px 26px;
     mask-image: radial-gradient(circle at 50% 40%, black, transparent 75%);
@@ -127,7 +197,7 @@ body::after {
 }
 
 a {
-    color: var(--primary);
+    color: var(--primary-text);
 }
 
 /* ============ Form / card styles ============ */
@@ -143,7 +213,7 @@ form {
     background: var(--glass-bg);
     backdrop-filter: blur(24px) saturate(160%);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
-    padding: 36px 32px;
+    padding: var(--space-9) var(--space-8);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     border: 1px solid var(--glass-border);
@@ -163,12 +233,16 @@ label {
     text-transform: uppercase;
 }
 
-h2 {
+/* Typography is a visual style, applied via class, independent of the
+   semantic heading level (h1/h2/h3) used in the markup -- so heading levels
+   can follow a correct, accessible document outline on every page without
+   being constrained by which size/weight they need to look like. */
+.heading-brand {
     text-align: center;
     margin: 0;
     color: var(--text);
-    font-size: 2.6em;
-    font-weight: 800;
+    font-size: var(--text-xl);
+    font-weight: var(--weight-black);
     background: linear-gradient(135deg, var(--primary), var(--accent));
     -webkit-background-clip: text;
     background-clip: text;
@@ -198,11 +272,11 @@ h2 {
     }
 }
 
-h3 {
+.heading-subtitle {
     text-align: center;
     margin: 0;
     color: var(--text);
-    font-weight: 700;
+    font-weight: var(--weight-bold);
 }
 
 input[type="text"], select {
@@ -243,6 +317,13 @@ button:hover {
 
 button:active {
     transform: scale(0.98);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    pointer-events: none;
 }
 
 .create-btn {
@@ -289,7 +370,7 @@ button:active {
 }
 
 .help-button:hover {
-    color: var(--primary);
+    color: var(--primary-text);
 }
 
 .error-banner {
@@ -329,17 +410,24 @@ button:active {
     padding: 20px 24px 16px;
 }
 
-.message-box h3 {
-    font-size: 1.15em;
+.message-box h1 {
+    text-align: center;
+    margin: 0;
+    color: var(--text);
+    font-weight: var(--weight-bold);
+    font-size: var(--text-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--space-2);
 }
 
 .room-code {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
     background: var(--surface-alt);
-    color: var(--primary);
+    color: var(--primary-text);
     border: 1px dashed var(--primary);
     padding: 2px 10px;
     border-radius: 999px;
@@ -349,6 +437,10 @@ button:active {
     cursor: pointer;
     font-size: 0.8em;
     transition: background-color 0.15s ease;
+}
+
+.room-code .material-icons {
+    font-size: 1em;
 }
 
 .room-code:hover {
@@ -468,23 +560,31 @@ button:active {
 }
 
 .reply-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--icon-btn-sm);
+    height: var(--icon-btn-sm);
     background: none;
     border: none;
+    border-radius: 50%;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 1em;
     padding: 0;
-    opacity: 0;
-    transition: opacity 0.15s ease;
+    /* Dim but always present, not hover-only: opacity:0-until-hover would make
+       this unreachable on touch devices, which have no hover state at all. */
+    opacity: 0.55;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
 }
 
-.message:hover .reply-btn {
-    opacity: 0.7;
+.reply-btn .material-icons {
+    font-size: var(--text-sm);
 }
 
-.reply-btn:hover {
-    opacity: 1 !important;
+.reply-btn:hover, .reply-btn:focus-visible {
+    opacity: 1;
     color: var(--primary);
+    background: var(--surface-alt);
 }
 
 .reply-quote {
@@ -523,16 +623,26 @@ button:active {
 
 .reply-cancel-btn {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--icon-btn-sm);
+    height: var(--icon-btn-sm);
     background: none;
     border: none;
+    border-radius: 50%;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 1em;
-    padding: 0 4px;
+    padding: 0;
+}
+
+.reply-cancel-btn .material-icons {
+    font-size: var(--text-sm);
 }
 
 .reply-cancel-btn:hover {
     color: var(--danger);
+    background: var(--surface-alt);
 }
 
 /* ============ Attach / message input ============ */
@@ -545,12 +655,11 @@ button:active {
     cursor: pointer;
     transition: background-color 0.15s ease, transform 0.1s ease;
     flex-shrink: 0;
-    width: 42px;
-    height: 42px;
+    width: var(--icon-btn-lg);
+    height: var(--icon-btn-lg);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1em;
     line-height: 1;
 }
 
@@ -578,7 +687,7 @@ button:active {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     padding: 10px;
-    z-index: 500;
+    z-index: var(--z-float);
     animation: incoming-pop 0.15s ease;
 }
 
@@ -633,13 +742,13 @@ button:active {
     position: fixed;
     top: 16px;
     left: 16px;
-    padding: 9px 16px;
+    padding: var(--space-2) var(--space-4);
     background-color: var(--danger);
     color: white;
     border: none;
     border-radius: 999px;
     cursor: pointer;
-    z-index: 1000;
+    z-index: var(--z-fixed);
     box-shadow: var(--shadow-md);
     font-weight: 600;
 }
@@ -652,13 +761,13 @@ button:active {
     position: fixed;
     top: 16px;
     right: 16px;
-    padding: 9px 16px;
+    padding: var(--space-2) var(--space-4);
     background-color: var(--surface);
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: 999px;
     cursor: pointer;
-    z-index: 1000;
+    z-index: var(--z-fixed);
     box-shadow: var(--shadow-md);
     font-weight: 600;
 }
@@ -675,7 +784,7 @@ button:active {
     max-height: 250px;
     overflow-y: auto;
     padding: 8px;
-    z-index: 1000;
+    z-index: var(--z-fixed);
     display: none;
 }
 
@@ -699,19 +808,22 @@ button:active {
 
 .kick-btn {
     flex-shrink: 0;
-    width: 20px;
-    height: 20px;
+    width: var(--icon-btn-sm);
+    height: var(--icon-btn-sm);
     padding: 0;
     border: none;
     border-radius: 50%;
     background: var(--surface-alt);
     color: var(--text-muted);
-    font-size: 0.75em;
     line-height: 1;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.kick-btn .material-icons {
+    font-size: var(--text-sm);
 }
 
 .kick-btn:hover {
@@ -745,7 +857,7 @@ button:active {
 }
 
 #call-btn {
-    padding: 9px 16px;
+    padding: var(--space-2) var(--space-4);
     border: none;
     border-radius: 999px;
     background-color: var(--accent);
@@ -777,7 +889,7 @@ button:active {
 }
 
 #mute-btn {
-    padding: 9px 16px;
+    padding: var(--space-2) var(--space-4);
     border: none;
     border-radius: 999px;
     background-color: var(--surface);
@@ -797,7 +909,7 @@ button:active {
     position: fixed;
     inset: 0;
     background: rgba(10, 10, 20, 0.45);
-    z-index: 1999;
+    z-index: var(--z-overlay);
 }
 
 .incoming-call-banner {
@@ -810,7 +922,7 @@ button:active {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     padding: 28px 36px;
-    z-index: 2000;
+    z-index: var(--z-modal);
     flex-direction: column;
     align-items: center;
     gap: 18px;
@@ -819,6 +931,11 @@ button:active {
 }
 
 .incoming-call-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
     font-size: 1.15em;
     font-weight: 700;
     color: var(--text);
@@ -861,6 +978,16 @@ button:active {
     100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .emoji-picker, .incoming-call-banner {
+        animation: none;
+    }
+
+    #call-btn.in-call {
+        animation: none;
+    }
+}
+
 /* ============ Main Welcome Page ============ */
 .welcome-container {
     position: relative;
@@ -879,7 +1006,7 @@ button:active {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: -1;
+    z-index: var(--z-behind);
 }
 
 .float-item {
@@ -909,8 +1036,9 @@ button:active {
 }
 
 .welcome-message {
-    font-size: 5em;
-    font-weight: 800;
+    margin: 0;
+    font-size: var(--text-display);
+    font-weight: var(--weight-black);
     background: linear-gradient(135deg, var(--primary), var(--accent));
     -webkit-background-clip: text;
     background-clip: text;
@@ -946,6 +1074,9 @@ button:active {
 }
 
 .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text-muted);
@@ -958,18 +1089,22 @@ button:active {
 
 .enter-room a {
     padding: 18px 40px;
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    /* Flat, like every other button in the app -- this was previously the
+       only gradient button, which broke the flat/solid button convention
+       used everywhere else (Send, Join, Create, Call, etc). */
+    background: var(--primary);
     color: white;
     font-size: 1.3em;
     font-weight: 700;
     text-decoration: none;
     border-radius: 999px;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
     box-shadow: var(--shadow-lg);
     display: inline-block;
 }
 
 .enter-room a:hover {
+    background: var(--primary-dark);
     transform: translateY(-2px);
     box-shadow: 0 20px 40px rgba(91, 95, 239, 0.35);
 }
@@ -977,6 +1112,15 @@ button:active {
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+/* Unlike the app's other animations, this one repeats indefinitely (every
+   1.8s, retriggered by JS as the landing page cycles languages) rather than
+   playing once -- so it's the most important one to disable here. */
+@media (prefers-reduced-motion: reduce) {
+    .welcome-message, .language-text {
+        animation: none;
+    }
 }
 
 /* ============ Help Page ============ */
@@ -988,7 +1132,7 @@ button:active {
     max-width: 640px;
     width: 90vw;
     margin: 0 auto;
-    padding: 36px 32px;
+    padding: var(--space-9) var(--space-8);
     background: var(--glass-bg);
     backdrop-filter: blur(24px) saturate(160%);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
@@ -997,9 +1141,8 @@ button:active {
     border: 1px solid var(--glass-border);
 }
 
-.help-container h2 {
+.help-container .heading-brand {
     margin-bottom: 8px;
-    text-align: center;
 }
 
 .help-container > p {
@@ -1008,10 +1151,10 @@ button:active {
     text-align: center;
 }
 
-.faq h4 {
+.faq .heading-section {
     margin-top: 20px;
     margin-bottom: 6px;
-    color: var(--primary);
+    color: var(--primary-text);
 }
 
 .faq p {
@@ -1020,10 +1163,12 @@ button:active {
 }
 
 .back-button {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
     margin-top: 28px;
     text-decoration: none;
-    color: var(--primary);
+    color: var(--primary-text);
     font-weight: 600;
     transition: color 0.15s ease;
 }
@@ -1063,7 +1208,7 @@ button:active {
         padding: 60px 14px 12px;
     }
 
-    .message-box h3 {
+    .message-box h1 {
         font-size: 1em;
     }
 
