@@ -143,14 +143,21 @@
 <script>
     // Disable both submit buttons once the form is on its way, so a slow
     // connection or an impatient extra click can't submit the form twice.
+    // This must happen on a deferred tick, not synchronously inside the
+    // submit handler: a submit button disabled before the browser finishes
+    // gathering the form's data is excluded from that data entirely --
+    // disabling the just-clicked button here would silently drop its own
+    // name=value (e.g. create=) from the submission.
     document.getElementById('home-form').addEventListener('submit', (event) => {
         const clicked = event.submitter;
-        document.querySelectorAll('#home-form button[type="submit"]').forEach((btn) => {
-            btn.disabled = true;
-        });
-        if (clicked) {
-            clicked.textContent = clicked.name === 'create' ? 'Creating…' : 'Joining…';
-        }
+        setTimeout(() => {
+            document.querySelectorAll('#home-form button[type="submit"]').forEach((btn) => {
+                btn.disabled = true;
+            });
+            if (clicked) {
+                clicked.textContent = clicked.name === 'create' ? 'Creating…' : 'Joining…';
+            }
+        }, 0);
     });
 </script>
 {% endblock %}
