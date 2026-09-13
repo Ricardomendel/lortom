@@ -8,9 +8,11 @@
         </button>
     </h1>
     <button type="button" id="leave-btn" class="btn-icon-label" onclick="leaveRoom()">
-        <span class="material-icons" aria-hidden="true">logout</span> Leave Room
+        <span class="material-icons" aria-hidden="true">logout</span> Leave
     </button>
-    <button type="button" id="user-count" class="btn-icon-label" onclick="toggleUserList()">Users: <span id="active-users">0</span></button>
+    <button type="button" id="user-count" class="btn-icon-label" onclick="toggleUserList()" aria-label="View users in this room">
+        <span class="material-icons" aria-hidden="true">group</span> <span id="active-users">0</span>
+    </button>
     <div id="user-list" style="display: none;"></div>
 
     <div class="call-bar">
@@ -20,9 +22,8 @@
             <span class="material-icons" id="call-btn-icon" aria-hidden="true">call</span>
             <span id="call-btn-label">Start Call</span>
         </button>
-        <button type="button" id="mute-btn" class="btn-icon-label" onclick="toggleMute()" style="display: none;">
+        <button type="button" id="mute-btn" onclick="toggleMute()" style="display: none;" aria-label="Mute" title="Mute">
             <span class="material-icons" id="mute-btn-icon" aria-hidden="true">mic_off</span>
-            <span id="mute-btn-label">Mute</span>
         </button>
     </div>
     <div id="live-transcript" class="muted"></div>
@@ -59,8 +60,8 @@
             <span class="material-icons" aria-hidden="true">mood</span>
         </button>
         <input type="text" placeholder="Message" name="message" id="message" required>
-        <button type="button" name="send" id="send-btn" class="btn-icon-label" onclick="sendMessage()">
-            <span class="material-icons" aria-hidden="true">send</span> Send
+        <button type="button" name="send" id="send-btn" onclick="sendMessage()" aria-label="Send message" title="Send">
+            <span class="material-icons" aria-hidden="true">send</span>
         </button>
     </div>
 </div>
@@ -350,7 +351,6 @@
     const callBtnLabel = document.getElementById('call-btn-label');
     const muteBtn = document.getElementById('mute-btn');
     const muteBtnIcon = document.getElementById('mute-btn-icon');
-    const muteBtnLabel = document.getElementById('mute-btn-label');
     const callStatus = document.getElementById('call-status');
 
     const setCallBtn = (icon, label) => {
@@ -358,9 +358,17 @@
         callBtnLabel.textContent = label;
     };
 
+    // mute-btn is icon-only: the icon swap (mic/mic_off) plus a reddish
+    // "muted" tint carry the state, so aria-label/title (not a visible
+    // label) are what need updating here.
     const setMuteBtn = (icon, label) => {
         muteBtnIcon.textContent = icon;
-        muteBtnLabel.textContent = label;
+        muteBtn.setAttribute('aria-label', label);
+        muteBtn.title = label;
+        // The button shows the *next* action (label "Unmute" means we are
+        // currently muted), so the red "muted" tint keys off the label,
+        // not the icon name.
+        muteBtn.classList.toggle('muted', label === 'Unmute');
     };
     const callTimerEl = document.getElementById('call-timer');
     const callActivity = document.getElementById('live-transcript'); // repurposed: shows an activity icon only, never words

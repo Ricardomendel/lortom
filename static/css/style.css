@@ -1,36 +1,40 @@
 /* ============ Design tokens ============ */
 :root {
-    /* -- Color -- */
-    --bg: #f3f4fb;
+    /* -- Color --
+       One brand color (--primary) for every normal/positive action, one
+       semantic danger color for destructive actions only, and neutrals for
+       everything else. Previously there was also a separate green --accent
+       (Create, Start Call, Accept all used it while Join/Send/everything
+       else used --primary) and a four-hue rainbow background -- neither
+       was reinforcing brand or meaning, just adding visual noise. */
+    --bg: #f4f5f8;
     --surface: #ffffff;
-    --surface-alt: #f5f6fb;
-    --glass-bg: rgba(255, 255, 255, 0.68);
+    --surface-alt: #f1f2f6;
+    --glass-bg: rgba(255, 255, 255, 0.72);
     --glass-border: rgba(255, 255, 255, 0.6);
-    --border: #e6e7f2;
-    --text: #1c1e2b;
-    --text-muted: #6b7085;
-    --primary: #5b5fef;
-    --primary-dark: #4548c9;
+    --border: #e2e4ec;
+    --text: #1a1c27;
+    --text-muted: #656b7e;
+    --primary: #4c4fd6;
+    --primary-dark: #3a3dbb;
     /* Text/link color, distinct from --primary: --primary fails AA (4.5:1) as
        small text on light backgrounds (it's tuned for white-on-primary
        buttons instead), and needs a different, lighter value in dark mode
        than --primary-dark (which fails contrast on dark surfaces). */
-    --primary-text: #4548c9;
+    --primary-text: #3a3dbb;
     --primary-contrast: #ffffff;
-    --accent: #17b890;
     --danger: #ef4444;
     --danger-dark: #c81e1e;
-    --bubble-own: #5b5fef;
+    --bubble-own: var(--primary);
     --bubble-own-text: #ffffff;
     --bubble-other: rgba(238, 240, 247, 0.85);
-    --bubble-other-text: #1c1e2b;
-    --shadow-sm: 0 1px 2px rgba(20, 20, 40, 0.06);
-    --shadow-md: 0 8px 24px rgba(20, 20, 40, 0.08);
-    --shadow-lg: 0 16px 46px rgba(31, 30, 90, 0.16);
-    --aurora-1: rgba(91, 95, 239, 0.42);
-    --aurora-2: rgba(23, 184, 144, 0.36);
-    --aurora-3: rgba(236, 72, 153, 0.30);
-    --aurora-4: rgba(56, 189, 248, 0.30);
+    --bubble-other-text: #1a1c27;
+    --shadow-sm: 0 1px 2px rgba(20, 20, 30, 0.06);
+    --shadow-md: 0 8px 24px rgba(20, 20, 30, 0.08);
+    --shadow-lg: 0 16px 40px rgba(20, 20, 30, 0.14);
+    /* A single, subtle brand-colored glow instead of a multi-hue backdrop. */
+    --glow-1: rgba(76, 79, 214, 0.16);
+    --glow-2: rgba(76, 79, 214, 0.10);
 
     /* -- Shape -- */
     --radius-sm: 8px;
@@ -66,7 +70,12 @@
 
     /* -- Icon button sizes (WCAG 2.2 AA minimum pointer target is 24x24 CSS
        px; these give a comfortable margin above that) -- */
-    --icon-btn-lg: 42px;
+    /* --icon-btn: the main room toolbar (leave, users, attach, emoji, send,
+       mute) -- one consistent size for every primary control.
+       --icon-btn-sm: smaller inline/contextual actions within message rows
+       and the user list (reply, remove user) -- deliberately a second,
+       smaller tier, not an accidental mismatch. */
+    --icon-btn: 36px;
     --icon-btn-sm: 28px;
 
     /* -- z-index scale -- */
@@ -89,17 +98,13 @@
         --text: #eef0f7;
         --text-muted: #9a9fb5;
         --primary-text: #8b8ef7;
-        --bubble-own: #5b5fef;
-        --bubble-own-text: #ffffff;
         --bubble-other: rgba(42, 44, 61, 0.85);
         --bubble-other-text: #eef0f7;
         --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
         --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
         --shadow-lg: 0 16px 46px rgba(0, 0, 0, 0.5);
-        --aurora-1: rgba(91, 95, 239, 0.35);
-        --aurora-2: rgba(23, 184, 144, 0.28);
-        --aurora-3: rgba(236, 72, 153, 0.22);
-        --aurora-4: rgba(56, 189, 248, 0.24);
+        --glow-1: rgba(91, 95, 239, 0.18);
+        --glow-2: rgba(91, 95, 239, 0.10);
     }
 }
 
@@ -150,20 +155,20 @@ body {
     isolation: isolate;
 }
 
-/* A soft, drifting mesh of color blobs behind every page -- generated purely
-   in CSS (no image file to load, host, or ever break). */
+/* A quiet, single-hue glow behind every page -- generated purely in CSS (no
+   image file to load, host, or ever break). Previously this was four
+   different hues drifting independently; one consistent brand color reads
+   as calmer and more deliberate. */
 body::before {
     content: '';
     position: fixed;
     inset: -15%;
     z-index: var(--z-deep-behind);
     background-image:
-        radial-gradient(circle at 12% 18%, var(--aurora-1), transparent 40%),
-        radial-gradient(circle at 85% 12%, var(--aurora-2), transparent 42%),
-        radial-gradient(circle at 78% 82%, var(--aurora-3), transparent 45%),
-        radial-gradient(circle at 15% 85%, var(--aurora-4), transparent 42%);
+        radial-gradient(circle at 15% 15%, var(--glow-1), transparent 45%),
+        radial-gradient(circle at 85% 80%, var(--glow-2), transparent 45%);
     filter: blur(70px);
-    animation: aurora-drift 24s ease-in-out infinite alternate;
+    animation: aurora-drift 30s ease-in-out infinite alternate;
 }
 
 body::after {
@@ -240,13 +245,9 @@ label {
 .heading-brand {
     text-align: center;
     margin: 0;
-    color: var(--text);
+    color: var(--primary);
     font-size: var(--text-xl);
     font-weight: var(--weight-black);
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
 }
 
 .wave-emoji {
@@ -326,12 +327,18 @@ button:disabled {
     pointer-events: none;
 }
 
+/* An outline/secondary treatment instead of a second solid brand color --
+   Join and Create are both primary actions, so they share one color family
+   (filled vs outline) rather than two competing solid colors. */
 .create-btn {
-    background: var(--accent);
+    background: transparent;
+    color: var(--primary-text);
+    border: 1.5px solid var(--primary);
 }
 
 .create-btn:hover {
-    background: #129b7c;
+    background: var(--surface-alt);
+    color: var(--primary-text);
 }
 
 .divider {
@@ -646,7 +653,10 @@ button:disabled {
 }
 
 /* ============ Attach / message input ============ */
-#attach-btn, #emoji-btn {
+/* One consistent icon-only button for every primary toolbar action --
+   previously #send-btn was a wider pill with a text label while its
+   neighbors were plain icon circles, an arbitrary inconsistency. */
+#attach-btn, #emoji-btn, #send-btn {
     padding: 0;
     border: none;
     border-radius: 50%;
@@ -655,8 +665,8 @@ button:disabled {
     cursor: pointer;
     transition: background-color 0.15s ease, transform 0.1s ease;
     flex-shrink: 0;
-    width: var(--icon-btn-lg);
-    height: var(--icon-btn-lg);
+    width: var(--icon-btn);
+    height: var(--icon-btn);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -731,10 +741,15 @@ button:disabled {
     color: var(--text);
 }
 
+/* Send stays the one branded icon in this row -- it's the primary action,
+   attach/emoji are secondary/neutral. */
 #send-btn {
-    flex-shrink: 0;
-    border-radius: 999px;
-    padding: 12px 20px;
+    background-color: var(--primary);
+    color: #fff;
+}
+
+#send-btn:hover {
+    background-color: var(--primary-dark);
 }
 
 /* ============ Leave / user-count buttons ============ */
@@ -742,15 +757,17 @@ button:disabled {
     position: fixed;
     top: 16px;
     left: 16px;
-    padding: var(--space-2) var(--space-4);
+    height: var(--icon-btn);
+    padding: 0 var(--space-3);
     background-color: var(--danger);
     color: white;
     border: none;
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     cursor: pointer;
     z-index: var(--z-fixed);
     box-shadow: var(--shadow-md);
     font-weight: 600;
+    font-size: var(--text-sm);
 }
 
 #leave-btn:hover {
@@ -761,15 +778,17 @@ button:disabled {
     position: fixed;
     top: 16px;
     right: 16px;
-    padding: var(--space-2) var(--space-4);
+    height: var(--icon-btn);
+    padding: 0 var(--space-3);
     background-color: var(--surface);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     cursor: pointer;
     z-index: var(--z-fixed);
     box-shadow: var(--shadow-md);
     font-weight: 600;
+    font-size: var(--text-sm);
 }
 
 #user-list {
@@ -857,10 +876,11 @@ button:disabled {
 }
 
 #call-btn {
-    padding: var(--space-2) var(--space-4);
+    height: var(--icon-btn);
+    padding: 0 var(--space-4);
     border: none;
-    border-radius: 999px;
-    background-color: var(--accent);
+    border-radius: var(--radius-full);
+    background-color: var(--primary);
     color: #fff;
     cursor: pointer;
     transition: background-color 0.2s ease;
@@ -869,7 +889,7 @@ button:disabled {
 }
 
 #call-btn:hover {
-    background-color: #129b7c;
+    background-color: var(--primary-dark);
 }
 
 #call-btn.in-call {
@@ -888,20 +908,32 @@ button:disabled {
     animation: none;
 }
 
+/* Icon-only, matching #attach-btn/#emoji-btn -- a visible "Mute"/"Unmute"
+   label isn't needed once the icon itself (mic / mic_off) and this reddish
+   "muted" tint both change together. */
 #mute-btn {
-    padding: var(--space-2) var(--space-4);
-    border: none;
-    border-radius: 999px;
-    background-color: var(--surface);
+    width: var(--icon-btn);
+    height: var(--icon-btn);
+    padding: 0;
     border: 1px solid var(--border);
+    border-radius: 50%;
+    background-color: var(--surface);
     color: var(--text);
     cursor: pointer;
     flex-shrink: 0;
-    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #mute-btn:hover {
-    background-color: var(--border);
+    background-color: var(--surface-alt);
+}
+
+#mute-btn.muted {
+    background-color: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
 }
 
 /* ============ Incoming call modal ============ */
@@ -951,13 +983,8 @@ button:disabled {
     min-width: 100px;
 }
 
-.incoming-call-actions .accept-btn {
-    background: var(--accent);
-}
-
-.incoming-call-actions .accept-btn:hover {
-    background: #129b7c;
-}
+/* .accept-btn intentionally has no color override here -- it just uses the
+   base button's --primary, same as every other primary action in the app. */
 
 .incoming-call-actions .decline-btn {
     background: var(--danger);
@@ -1039,10 +1066,7 @@ button:disabled {
     margin: 0;
     font-size: var(--text-display);
     font-weight: var(--weight-black);
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--primary);
     margin-bottom: 12px;
     animation: fadeIn 0.5s ease-in-out;
     max-width: 100%;
