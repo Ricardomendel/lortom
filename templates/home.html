@@ -1,8 +1,10 @@
 {% extends 'base.html' %}
 
 {% block content %}
+{% set emoji3d = "https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets" %}
+<div class="home-layout">
 <form method="post" class="buttons" id="home-form">
-    <h1 class="heading-brand">LorTam <span class="wave-emoji" aria-hidden="true">👋</span></h1>
+    <h1 class="heading-brand">LorTam <img class="wave-emoji" src="{{ emoji3d }}/Waving%20hand/Default/3D/waving_hand_3d_default.png" alt=""></h1>
     <h2 class="heading-subtitle">Enter The Chat Room</h2>
     <div class="field">
         <label>Name</label>
@@ -140,6 +142,10 @@
         </a>
     </div>
 </form>
+<div class="home-illustration" aria-hidden="true">
+    {% include '_hero_illustration.html' %}
+</div>
+</div>
 <script>
     // Disable both submit buttons once the form is on its way, so a slow
     // connection or an impatient extra click can't submit the form twice.
