@@ -2,7 +2,8 @@
 
 {% block content %}
 {% set emoji3d = "https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@1ffb34c752ecf5d402f04cfb4b392c77f57c54bc/assets" %}
-<div class="home-layout">
+<div class="split-screen">
+<div class="split-form-side">
 <form method="post" class="buttons" id="home-form">
     <h1 class="heading-brand">LorTam <img class="wave-emoji" src="{{ emoji3d }}/Waving%20hand/Default/3D/waving_hand_3d_default.png" alt=""></h1>
     <h2 class="heading-subtitle">Enter The Chat Room</h2>
@@ -142,8 +143,10 @@
         </a>
     </div>
 </form>
-<div class="home-illustration" aria-hidden="true">
+</div>
+<div class="split-visual-side" aria-hidden="true">
     {% include '_hero_illustration.html' %}
+    <p class="split-visual-tagline">Speak your language. They'll hear their own.</p>
 </div>
 </div>
 <script>

@@ -211,33 +211,59 @@ form {
     max-width: 440px;
 }
 
-/* Form on the left, illustration on the right on wide screens; the
-   illustration drops out entirely below that width so the form keeps full
-   width and doesn't compete for space on a phone. */
-.home-layout {
+/* Full-height split screen: form on the left (over the app's usual subtle
+   glow background), a solid brand-colored panel with the illustration on
+   the right. A small floating card next to a small floating image left a
+   lot of bare, unused space on real screens; a proper split fills the
+   viewport intentionally instead. Below 900px width it's just the form,
+   full width -- there's no room for a second panel on a phone. */
+.split-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+}
+
+.split-form-side {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--space-10);
-    width: 100%;
-    max-width: 1000px;
+    padding: var(--space-6);
+    overflow-y: auto;
 }
 
-.home-illustration {
+.split-visual-side {
     display: none;
     flex: 1;
     min-width: 0;
-    max-width: 460px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-8);
+    padding: var(--space-10);
+    background: var(--primary);
 }
 
-.home-illustration .hero-illustration {
+.split-visual-side .hero-illustration {
+    width: 100%;
+    max-width: 480px;
     margin: 0;
-    filter: drop-shadow(0 16px 32px rgba(20, 20, 30, 0.12));
+    filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.18));
+}
+
+.split-visual-tagline {
+    color: rgba(255, 255, 255, 0.92);
+    font-size: var(--text-md);
+    font-weight: var(--weight-semibold);
+    text-align: center;
+    max-width: 360px;
+    margin: 0;
 }
 
 @media (min-width: 900px) {
-    .home-illustration {
-        display: block;
+    .split-visual-side {
+        display: flex;
     }
 }
 
