@@ -540,7 +540,14 @@
         const finishedRecorder = mediaRecorder;
         finishedRecorder.onstop = async () => {
             if (recordedChunks.length === 0) return;
-            const blob = new Blob(recordedChunks, { type: recorderMimeType || 'audio/webm' });
+            // Use the recorder's own reported mimeType, not our requested one: when
+            // none of our candidate codecs is supported (e.g. Safari), the browser
+            // silently records in its own default container (commonly audio/mp4),
+            // and mislabeling that as audio/webm made the server tell Google to
+            // decode WEBM_OPUS bytes that were never actually webm -- Google would
+            // then bill 0 seconds of audio and report no speech, every time.
+            const actualMimeType = finishedRecorder.mimeType || recorderMimeType || 'audio/webm';
+            const blob = new Blob(recordedChunks, { type: actualMimeType });
             if (blob.size < MIN_BLOB_BYTES) return;
             const base64 = await blobToBase64(blob);
             socketio.emit('voice_audio', { content: base64, mime: blob.type });

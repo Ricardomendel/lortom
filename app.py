@@ -91,7 +91,15 @@ def stt_encoding_for_mime(mime):
         return 'OGG_OPUS'
     if 'mp3' in mime or 'mpeg' in mime:
         return 'MP3'
-    return 'WEBM_OPUS'
+    if 'webm' in mime:
+        return 'WEBM_OPUS'
+    # Browsers that support none of our requested codecs (notably Safari, which
+    # records audio/mp4) fall through here. Cloud Speech-to-Text's sync
+    # recognize API has no MP4/AAC encoding at all, so guessing WEBM_OPUS for
+    # it would just make Google silently fail to decode the audio (0s billed,
+    # empty results) -- return None so the caller can report this precisely
+    # instead of spending an API call on a request that can't work.
+    return None
 
 def speech_to_text(audio_b64, mime, lang_code):
     """Transcribes a short audio clip via Cloud Speech-to-Text. Returns None on
@@ -100,13 +108,17 @@ def speech_to_text(audio_b64, mime, lang_code):
     if not GOOGLE_TRANSLATE_API_KEY:
         app.logger.warning("[speech-to-text] GOOGLE_TRANSLATE_API_KEY is not set")
         return None
+    encoding = stt_encoding_for_mime(mime)
+    if not encoding:
+        app.logger.warning(f"[speech-to-text] lang={lang_code!r} mime={mime!r} has no supported Cloud STT encoding, skipping")
+        return None
     try:
         response = requests.post(
             GOOGLE_SPEECH_TO_TEXT_URL,
             params={"key": GOOGLE_TRANSLATE_API_KEY},
             json={
                 "config": {
-                    "encoding": stt_encoding_for_mime(mime),
+                    "encoding": encoding,
                     "languageCode": lang_code,
                 },
                 "audio": {"content": audio_b64},
@@ -158,7 +170,13 @@ def text_to_speech(text, lang_code):
             },
             timeout=15,
         )
-        response.raise_for_status()
+        if not response.ok:
+            # Capture Google's actual error body (e.g. "unsupported voice/language")
+            # instead of just the generic HTTP status -- requests' exception message
+            # alone doesn't include it, and that detail is the difference between a
+            # transient failure and a language Cloud TTS has no voice for at all.
+            app.logger.warning(f"[text-to-speech] lang={lang_code!r} FAILED: {response.status_code} {response.text[:300]}")
+            return None
         return response.json()["audioContent"]
     except Exception as e:
         app.logger.warning(f"[text-to-speech] lang={lang_code!r} FAILED: {e}")
