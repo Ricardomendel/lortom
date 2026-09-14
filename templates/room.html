@@ -660,6 +660,23 @@
         audio.play().catch(done);
     });
 
+    // Fallback for languages Cloud Text-to-Speech has no voice for at all (e.g.
+    // Akan): the server sends the translated text so this browser's own speech
+    // synthesis can speak it instead. The text is only ever handed to the
+    // speech synthesizer, never rendered on screen or stored, so the call
+    // stays audio-only from the user's point of view.
+    socketio.on('call_speak', (data) => {
+        if (callState !== 'in-call' || !window.speechSynthesis) return;
+        isPlayingIncoming = true;
+        callActivity.textContent = '🔊';
+        const done = () => { isPlayingIncoming = false; callActivity.textContent = ''; };
+        const utterance = new SpeechSynthesisUtterance(data.text);
+        utterance.lang = data.lang || '';
+        utterance.onend = done;
+        utterance.onerror = done;
+        window.speechSynthesis.speak(utterance);
+    });
+
     // Starts, cancels, or ends a call depending on where we are in the flow.
     const toggleCall = () => {
         if (!micSupported) return;

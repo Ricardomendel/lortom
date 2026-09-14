@@ -302,8 +302,10 @@ def handle_message(data):
 @socketio.on("voice_audio")
 def handle_voice_audio(data):
     """One VAD-segmented utterance from a live call: transcribe it, translate the
-    transcript per recipient, synthesize speech in their language, and send back
-    audio only -- no text is ever shown or stored for call audio."""
+    transcript per recipient, and synthesize speech in their language via Cloud
+    TTS (or, if Cloud TTS has no voice for that language, send the translated
+    text for the recipient's own browser to speak instead) -- no text is ever
+    shown on screen or stored for call audio, only spoken."""
     room = session.get("room")
     if room not in rooms:
         return
@@ -335,13 +337,19 @@ def handle_voice_audio(data):
 
     for member in recipients:
         translated_text = safe_translate(transcript, member["language"])
-        audio_content = text_to_speech(translated_text, speech_lang_tag(member["language"]))
-        if not audio_content:
-            app.logger.warning(f"[voice_audio] text_to_speech returned nothing for {member['name']!r}, skipping")
+        recipient_lang_tag = speech_lang_tag(member["language"])
+        audio_content = text_to_speech(translated_text, recipient_lang_tag)
+        if audio_content:
+            emit("call_audio", {"name": sender_name, "audio": audio_content}, room=member["sid"])
+            app.logger.warning(f"[voice_audio] sent translated audio to {member['name']!r}")
             continue
 
-        emit("call_audio", {"name": sender_name, "audio": audio_content}, room=member["sid"])
-        app.logger.warning(f"[voice_audio] sent translated audio to {member['name']!r}")
+        # Cloud TTS has no voice at all for some languages (e.g. Akan) -- fall
+        # back to the recipient's own browser speech synthesis. The text is
+        # sent only to be spoken client-side, never rendered or stored, so
+        # this keeps the audio-only nature of calls intact.
+        app.logger.warning(f"[voice_audio] text_to_speech unavailable for {member['name']!r}, falling back to browser speech synthesis")
+        emit("call_speak", {"name": sender_name, "text": translated_text, "lang": recipient_lang_tag}, room=member["sid"])
 
 @socketio.on("connect")
 def connect(auth):
