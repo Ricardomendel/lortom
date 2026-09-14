@@ -397,6 +397,8 @@
     let speechStartedAt = null;
     let silenceStartedAt = null;
     let isPlayingIncoming = false; // true while translated audio is playing, so we don't capture our own speakers
+    let pendingSpeechUtterance = null; // keeps a strong reference alive -- Chrome silently drops/GCs a
+                                        // SpeechSynthesisUtterance with no outside reference before it speaks
 
     const VAD_THRESHOLD = 10;          // RMS-ish level (0-255 scale) above which we consider it speech
     const SILENCE_HANGOVER_MS = 700;   // how long silence must persist before an utterance is considered finished
@@ -669,11 +671,13 @@
         if (callState !== 'in-call' || !window.speechSynthesis) return;
         isPlayingIncoming = true;
         callActivity.textContent = '🔊';
-        const done = () => { isPlayingIncoming = false; callActivity.textContent = ''; };
+        const done = () => { isPlayingIncoming = false; callActivity.textContent = ''; pendingSpeechUtterance = null; };
         const utterance = new SpeechSynthesisUtterance(data.text);
         utterance.lang = data.lang || '';
         utterance.onend = done;
         utterance.onerror = done;
+        pendingSpeechUtterance = utterance; // see declaration above -- must outlive this handler
+        window.speechSynthesis.cancel(); // clear anything stuck queued from a prior utterance
         window.speechSynthesis.speak(utterance);
     });
 
