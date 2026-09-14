@@ -118,7 +118,15 @@ def speech_to_text(audio_b64, mime, lang_code):
         if not results:
             app.logger.warning(f"[speech-to-text] lang={lang_code!r} succeeded but recognized no speech (empty results)")
             return None
-        transcript = results[0]["alternatives"][0]["transcript"]
+        # Google's JSON mapping omits fields left at their default value, so a
+        # low-confidence alternative can arrive with no "transcript" key at all
+        # (an empty transcript) rather than transcript="". Treat that the same
+        # as "no speech recognized" instead of letting it raise a KeyError.
+        alternatives = results[0].get("alternatives", [])
+        transcript = alternatives[0].get("transcript", "") if alternatives else ""
+        if not transcript:
+            app.logger.warning(f"[speech-to-text] lang={lang_code!r} succeeded but transcript was empty")
+            return None
         app.logger.warning(f"[speech-to-text] lang={lang_code!r} transcript={transcript[:60]!r}")
         return transcript
     except Exception as e:
