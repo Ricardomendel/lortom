@@ -402,6 +402,10 @@
     const SILENCE_HANGOVER_MS = 700;   // how long silence must persist before an utterance is considered finished
     const MIN_UTTERANCE_MS = 350;      // ignore blips shorter than this (clicks, breaths)
     const MIN_BLOB_BYTES = 800;        // ignore recordings too small to contain real speech
+    const MAX_UTTERANCE_MS = 8000;     // force-flush even without a silence gap -- in a noisy room the
+                                        // mic level may never dip back below VAD_THRESHOLD, and without
+                                        // this an utterance could just keep recording forever and never
+                                        // actually get sent
 
     const formatCallTime = (totalSeconds) => {
         const m = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
@@ -585,6 +589,17 @@
                 callActivity.textContent = '';
                 stopAndSendUtterance();
             }
+        }
+
+        // Safety net: in a noisy room the level may never dip back below
+        // VAD_THRESHOLD, so the silence-based flush above could wait forever
+        // and the utterance would never be sent. Force a flush once an
+        // utterance has run too long, then immediately keep recording.
+        if (isSpeechActive && now - speechStartedAt > MAX_UTTERANCE_MS) {
+            silenceStartedAt = null;
+            stopAndSendUtterance();
+            speechStartedAt = now;
+            startNewRecorder();
         }
     };
 

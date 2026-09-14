@@ -116,6 +116,7 @@ def speech_to_text(audio_b64, mime, lang_code):
         response.raise_for_status()
         results = response.json().get("results", [])
         if not results:
+            app.logger.warning(f"[speech-to-text] lang={lang_code!r} succeeded but recognized no speech (empty results)")
             return None
         transcript = results[0]["alternatives"][0]["transcript"]
         app.logger.warning(f"[speech-to-text] lang={lang_code!r} transcript={transcript[:60]!r}")
@@ -281,20 +282,31 @@ def handle_voice_audio(data):
     if not audio_b64:
         return
 
+    # Confirms an utterance actually reached the server at all -- if this
+    # line never appears in the logs during a real call, the mic/VAD
+    # pipeline in the browser never sent anything, which points at the
+    # client (mic permissions, voice-activity threshold never tripping in
+    # a noisy room, etc.) rather than the server or the Google APIs.
+    app.logger.warning(f"[voice_audio] received from {sender_name!r}, {len(audio_b64)} b64 chars, mime={mime!r}")
+
     transcript = speech_to_text(audio_b64, mime, speech_lang_tag(sender_language))
     if not transcript or not transcript.strip():
         return
 
-    for member in rooms[room]["members"]:
-        if member["sid"] == sender_sid:
-            continue  # don't echo the speaker's own voice back to them
+    recipients = [m for m in rooms[room]["members"] if m["sid"] != sender_sid]
+    if not recipients:
+        app.logger.warning("[voice_audio] no other members in the room to send translated audio to")
+        return
 
+    for member in recipients:
         translated_text = safe_translate(transcript, member["language"])
         audio_content = text_to_speech(translated_text, speech_lang_tag(member["language"]))
         if not audio_content:
+            app.logger.warning(f"[voice_audio] text_to_speech returned nothing for {member['name']!r}, skipping")
             continue
 
         emit("call_audio", {"name": sender_name, "audio": audio_content}, room=member["sid"])
+        app.logger.warning(f"[voice_audio] sent translated audio to {member['name']!r}")
 
 @socketio.on("connect")
 def connect(auth):
