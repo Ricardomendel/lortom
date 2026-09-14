@@ -114,9 +114,18 @@ def speech_to_text(audio_b64, mime, lang_code):
             timeout=15,
         )
         response.raise_for_status()
-        results = response.json().get("results", [])
+        payload = response.json()
+        results = payload.get("results", [])
         if not results:
-            app.logger.warning(f"[speech-to-text] lang={lang_code!r} succeeded but recognized no speech (empty results)")
+            # totalBilledTime tells us whether Google actually received/processed
+            # real audio (a few seconds billed) or effectively got nothing (~0s),
+            # which distinguishes "genuinely quiet/no speech" from a corrupt or
+            # truncated audio blob never reaching Google as valid content.
+            billed = payload.get("totalBilledTime", "?")
+            app.logger.warning(
+                f"[speech-to-text] lang={lang_code!r} succeeded but recognized no speech "
+                f"(empty results, totalBilledTime={billed}, audio_bytes={len(audio_b64)})"
+            )
             return None
         # Google's JSON mapping omits fields left at their default value, so a
         # low-confidence alternative can arrive with no "transcript" key at all
